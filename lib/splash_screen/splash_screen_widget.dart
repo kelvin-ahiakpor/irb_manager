@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
+import '/login/login_widget.dart';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +30,11 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => SplashScreenModel());
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      context.go(LoginWidget.routePath);
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
   }
@@ -228,10 +234,11 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       CircularPercentIndicator(
-                        percent: 0.0,
+                        percent: 1.0,
                         radius: 20.0,
                         lineWidth: 6.0,
-                        animation: false,
+                        animation: true,
+                        animationDuration: 1800,
                         animateFromLastPercent: true,
                         progressColor: FlutterFlowTheme.of(context).primary,
                       ),
