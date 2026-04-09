@@ -1,3 +1,4 @@
+import '/backend/supabase.dart';
 import '/components/result_card_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -273,14 +274,17 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                                   ),
                                                   Expanded(
                                                     flex: 1,
-                                                    child: Container(
-                                                      width: 0.0,
-                                                      height: 0.0,
+                                                    child: TextField(
+                                                      controller: _model.studentIdController,
+                                                      keyboardType: TextInputType.number,
+                                                      decoration: InputDecoration(
+                                                        hintText: 'e.g. 88292024',
+                                                        border: InputBorder.none,
+                                                        isDense: true,
+                                                        contentPadding: EdgeInsets.zero,
+                                                      ),
+                                                      style: FlutterFlowTheme.of(context).bodyMedium,
                                                     ),
-                                                  ),
-                                                  Container(
-                                                    width: 0.0,
-                                                    height: 0.0,
                                                   ),
                                                 ].divide(SizedBox(width: 8.0)),
                                               ),
@@ -297,7 +301,32 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                 ),
                               ].divide(SizedBox(width: 8.0)),
                             ),
-                            Container(
+                            GestureDetector(
+                              onTap: _model.isSearching
+                                  ? null
+                                  : () async {
+                                      final query = _model.studentIdController.text.trim();
+                                      if (query.isEmpty) return;
+                                      safeSetState(() => _model.isSearching = true);
+                                      try {
+                                        final data = await supabase
+                                            .from('applications')
+                                            .select()
+                                            .eq('student_id', query)
+                                            .order('submitted_at', ascending: false);
+                                        safeSetState(() {
+                                          _model.results = List<Map<String, dynamic>>.from(data);
+                                          _model.hasSearched = true;
+                                          _model.isSearching = false;
+                                        });
+                                      } catch (_) {
+                                        safeSetState(() {
+                                          _model.isSearching = false;
+                                          _model.hasSearched = true;
+                                        });
+                                      }
+                                    },
+                              child: Container(
                               decoration: BoxDecoration(
                                 color: FlutterFlowTheme.of(context).primary,
                               ),
@@ -314,13 +343,13 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                           CrossAxisAlignment.center,
                                       children: [
                                         Icon(
-                                          Icons.search_rounded,
+                                          _model.isSearching ? Icons.hourglass_empty_rounded : Icons.search_rounded,
                                           color: FlutterFlowTheme.of(context)
                                               .primaryBackground,
                                           size: 16.0,
                                         ),
                                         Text(
-                                          'Check Status',
+                                          _model.isSearching ? 'Searching...' : 'Check Status',
                                           style: FlutterFlowTheme.of(context)
                                               .labelMedium
                                               .override(
@@ -359,24 +388,36 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                 ),
                               ),
                             ),
+                            ),
                           ].divide(SizedBox(height: 16.0)),
                         ),
                       ),
                     ),
-                    wrapWithModel(
-                      model: _model.resultCardModel1,
-                      updateCallback: () => safeSetState(() {}),
-                      child: ResultCardWidget(
-                        name: 'Kojo Mensah',
-                        id: 88292024.0,
-                        status_bg: 'accent',
-                        status: 'UNDER REVIEW',
-                        title:
-                            'Impact of FinTech on Rural Savings in Central Ghana',
-                        has_notes: false,
-                        notes: '',
+                    if (_model.hasSearched && _model.results.isEmpty)
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
+                        child: Text(
+                          'No applications found for that student ID.',
+                          textAlign: TextAlign.center,
+                          style: FlutterFlowTheme.of(context).bodyMedium,
+                        ),
                       ),
-                    ),
+                    ..._model.results.asMap().entries.map((e) {
+                      final app = e.value;
+                      final status = (app['status'] as String?) ?? 'PENDING';
+                      return Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 8.0),
+                        child: ResultCardWidget(
+                          name: (app['student_name'] as String?) ?? '',
+                          id: double.tryParse((app['student_id'] as String?) ?? '') ?? 0.0,
+                          status_bg: status == 'APPROVED' ? 'success' : status == 'REJECTED' ? 'error' : 'accent',
+                          status: status.replaceAll('_', ' '),
+                          title: (app['subject'] as String?) ?? '',
+                          has_notes: false,
+                          notes: '',
+                        ),
+                      );
+                    }).toList(),
                     Container(
                       decoration: BoxDecoration(
                         color: Color(0xFFE8E2D6),

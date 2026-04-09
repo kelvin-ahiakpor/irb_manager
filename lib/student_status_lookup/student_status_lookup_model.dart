@@ -12,6 +12,11 @@ class StudentStatusLookupModel
     extends FlutterFlowModel<StudentStatusLookupWidget> {
   ///  State fields for stateful widgets in this page.
 
+  TextEditingController studentIdController = TextEditingController();
+  List<Map<String, dynamic>> results = [];
+  bool isSearching = false;
+  bool hasSearched = false;
+
   // Model for result_card component.
   late ResultCardModel resultCardModel1;
   // Model for result_card component.
@@ -25,6 +30,7 @@ class StudentStatusLookupModel
 
   @override
   void dispose() {
+    studentIdController.dispose();
     resultCardModel1.dispose();
     resultCardModel2.dispose();
   }
