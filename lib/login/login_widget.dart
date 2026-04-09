@@ -8,6 +8,7 @@ import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -66,6 +67,19 @@ class _LoginWidgetState extends State<LoginWidget> {
       if (!mounted) return;
 
       if (row != null) {
+        // Save FCM token so we can send push notifications to this reviewer
+        try {
+          final fcmToken = await FirebaseMessaging.instance.getToken();
+          if (fcmToken != null) {
+            await supabase
+                .from('reviewers')
+                .update({'device_token': fcmToken})
+                .eq('email', email);
+          }
+        } catch (_) {
+          // Non-fatal — proceed to dashboard even if token registration fails
+        }
+        if (!mounted) return;
         context.go(ReviewerDashboardWidget.routePath);
       } else {
         await supabase.auth.signOut();

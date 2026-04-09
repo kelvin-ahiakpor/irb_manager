@@ -934,6 +934,17 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                       'status': _model.selectedStatus,
                                                       'changed_by': supabase.auth.currentUser?.id,
                                                     });
+                                                    // Send notification if the notify switch is on
+                                                    if (_model.stdSwitchModel.switchValue == true) {
+                                                      await supabase.functions.invoke(
+                                                        'send-notification',
+                                                        body: {
+                                                          'application_id': id,
+                                                          'channels': ['email', 'sms'],
+                                                          'status': _model.selectedStatus,
+                                                        },
+                                                      );
+                                                    }
                                                     if (mounted) context.safePop();
                                                   } catch (_) {
                                                     safeSetState(() => _model.isSubmitting = false);

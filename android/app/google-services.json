@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "175765240682",
+    "project_id": "ashesi-irb-manager",
+    "storage_bucket": "ashesi-irb-manager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:175765240682:android:62dae87cffa17e0d754313",
+        "android_client_info": {
+          "package_name": "com.ashesi.ashesi_irb_manager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-he2ztyatx31UO7bW8z1mfXyuJMbjouc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

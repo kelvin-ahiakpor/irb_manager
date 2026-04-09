@@ -1,4 +1,6 @@
 import 'package:app_links/app_links.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -17,6 +19,8 @@ void main() async {
 
   await SupabaseConfig.initialize();
   await FlutterFlowTheme.initialize();
+  await Firebase.initializeApp();
+  await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true);
 
   // Handle OAuth deep link callbacks (Supabase Azure login redirect).
   final appLinks = AppLinks();
