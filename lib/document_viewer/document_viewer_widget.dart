@@ -1,3 +1,4 @@
+import '/backend/supabase.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -7,11 +8,19 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'document_viewer_model.dart';
 export 'document_viewer_model.dart';
 
 class DocumentViewerWidget extends StatefulWidget {
-  const DocumentViewerWidget({super.key});
+  const DocumentViewerWidget({
+    super.key,
+    this.storagePath,
+    this.fileName,
+  });
+
+  final String? storagePath;
+  final String? fileName;
 
   static String routeName = 'DocumentViewer';
   static String routePath = '/documentViewer';
@@ -25,12 +34,34 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  String? _signedUrl;
+  bool _loadingUrl = true;
+
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => DocumentViewerModel());
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSignedUrl());
+  }
+
+  Future<void> _loadSignedUrl() async {
+    final path = widget.storagePath;
+    if (path == null || path.isEmpty) {
+      safeSetState(() => _loadingUrl = false);
+      return;
+    }
+    try {
+      final url = await supabase.storage
+          .from('attachments')
+          .createSignedUrl(path, 3600);
+      safeSetState(() {
+        _signedUrl = url;
+        _loadingUrl = false;
+      });
+    } catch (_) {
+      safeSetState(() => _loadingUrl = false);
+    }
   }
 
   @override
@@ -81,9 +112,7 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
                                   .primaryBackground,
                               size: 28.0,
                             ),
-                            onPressed: () {
-                              print('IconButton pressed ...');
-                            },
+                            onPressed: () => context.safePop(),
                           ),
                           Expanded(
                             flex: 1,
@@ -98,7 +127,7 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'IRB_FORM_V2_KOJO.pdf',
+                                      widget.fileName ?? 'Document',
                                       maxLines: 1,
                                       style: FlutterFlowTheme.of(context)
                                           .titleMedium
@@ -125,7 +154,7 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
                                     Opacity(
                                       opacity: 0.8,
                                       child: Text(
-                                        'STUDENT ID: 88292024',
+                                        _loadingUrl ? 'Loading...' : (_signedUrl != null ? 'Tap open to view in browser' : 'Preview unavailable'),
                                         style: FlutterFlowTheme.of(context)
                                             .labelSmall
                                             .override(
@@ -156,14 +185,14 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
                           FlutterFlowIconButton(
                             buttonSize: 40.0,
                             icon: Icon(
-                              Icons.share_rounded,
+                              Icons.open_in_browser_rounded,
                               color: FlutterFlowTheme.of(context)
                                   .primaryBackground,
                               size: 24.0,
                             ),
-                            onPressed: () {
-                              print('IconButton pressed ...');
-                            },
+                            onPressed: _loadingUrl || _signedUrl == null
+                                ? null
+                                : () => launchUrl(Uri.parse(_signedUrl!)),
                           ),
                         ],
                       ),
