@@ -12,6 +12,9 @@ import 'package:provider/provider.dart';
 class ReviewerDashboardModel extends FlutterFlowModel<ReviewerDashboardWidget> {
   ///  State fields for stateful widgets in this page.
 
+  // Active filter label — matches the FilterBoxWidget label strings.
+  String activeFilter = 'ALL';
+
   // Model for filter_box component.
   late FilterBoxModel filterBoxModel1;
   // Model for filter_box component.

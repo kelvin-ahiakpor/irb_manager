@@ -1,3 +1,4 @@
+import '/backend/supabase.dart';
 import '/components/filter_box_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -236,80 +237,42 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                       mainAxisSize: MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
-                          flex: 1,
-                          child: wrapWithModel(
-                            model: _model.filterBoxModel1,
-                            updateCallback: () => safeSetState(() {}),
-                            child: FilterBoxWidget(
-                              selected: true,
-                              label: 'ALL',
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: wrapWithModel(
-                            model: _model.filterBoxModel2,
-                            updateCallback: () => safeSetState(() {}),
-                            child: FilterBoxWidget(
-                              selected: false,
-                              label: 'PENDING',
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: wrapWithModel(
-                            model: _model.filterBoxModel3,
-                            updateCallback: () => safeSetState(() {}),
-                            child: FilterBoxWidget(
-                              selected: false,
-                              label: 'IN REVIEW',
-                            ),
-                          ),
-                        ),
+                        ...[
+                          'ALL',
+                          'PENDING',
+                          'IN REVIEW'
+                        ].asMap().entries.map((e) => Expanded(
+                              flex: 1,
+                              child: GestureDetector(
+                                onTap: () => safeSetState(
+                                    () => _model.activeFilter = e.value),
+                                child: FilterBoxWidget(
+                                  selected: _model.activeFilter == e.value,
+                                  label: e.value,
+                                ),
+                              ),
+                            )),
                       ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
-                          flex: 1,
-                          child: wrapWithModel(
-                            model: _model.filterBoxModel4,
-                            updateCallback: () => safeSetState(() {}),
-                            child: FilterBoxWidget(
-                              selected: false,
-                              label: 'COND. APP.',
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: wrapWithModel(
-                            model: _model.filterBoxModel5,
-                            updateCallback: () => safeSetState(() {}),
-                            child: FilterBoxWidget(
-                              selected: false,
-                              label: 'APPROVED',
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: wrapWithModel(
-                            model: _model.filterBoxModel6,
-                            updateCallback: () => safeSetState(() {}),
-                            child: FilterBoxWidget(
-                              selected: false,
-                              label: 'REJECTED',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                        ...[
+                          'COND. APP.',
+                          'APPROVED',
+                          'REJECTED'
+                        ].asMap().entries.map((e) => Expanded(
+                              flex: 1,
+                              child: GestureDetector(
+                                onTap: () => safeSetState(
+                                    () => _model.activeFilter = e.value),
+                                child: FilterBoxWidget(
+                                  selected: _model.activeFilter == e.value,
+                                  label: e.value,
+                                ),
+                              ),
+                            )),
                   ].divide(SizedBox(height: 0.0)),
                 ),
               ),
@@ -380,7 +343,66 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                         ),
                       ),
                     ),
-                    Padding(
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: supabase
+                          .from('applications')
+                          .stream(primaryKey: ['id'])
+                          .order('submitted_at', ascending: false),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32.0),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: FlutterFlowTheme.of(context).primary,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          );
+                        }
+                        final all = snapshot.data!;
+                        final filtered = _model.activeFilter == 'ALL'
+                            ? all
+                            : all.where((a) {
+                                final s = (a['status'] as String?) ?? '';
+                                return switch (_model.activeFilter) {
+                                  'PENDING' => s == 'PENDING',
+                                  'IN REVIEW' => s == 'UNDER REVIEW',
+                                  'COND. APP.' => s == 'CONDITIONALLY APPROVED',
+                                  'APPROVED' => s == 'APPROVED',
+                                  'REJECTED' => s == 'REJECTED',
+                                  _ => true,
+                                };
+                              }).toList();
+                        if (filtered.isEmpty) {
+                          return Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32.0),
+                            child: Center(
+                              child: Text(
+                                'No applications',
+                                style: FlutterFlowTheme.of(context)
+                                    .bodySmall
+                                    .override(
+                                      font: GoogleFonts.inter(),
+                                      color: FlutterFlowTheme.of(context)
+                                          .secondaryText,
+                                    ),
+                              ),
+                            ),
+                          );
+                        }
+                        return Column(
+                          children: filtered
+                              .map((app) =>
+                                  _buildApplicationCard(context, app))
+                              .toList(),
+                        );
+                      },
+                    ),
+                    // PLACEHOLDER — kept so the old hardcoded card structure
+                    // below this comment is never reached. It is replaced above.
+                    if (false)
+                      Padding(
                       padding:
                           EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 8.0),
                       child: Container(
@@ -1547,6 +1569,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                 ),
               ),
             ),
+            // ── footer ───────────────────────────────────────────────────────
             Container(
               decoration: BoxDecoration(
                 color: FlutterFlowTheme.of(context).secondary,
@@ -1596,5 +1619,163 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
         ),
       ),
     );
+  }
+
+  // ── Application card builder ───────────────────────────────────────────────
+
+  Widget _buildApplicationCard(
+      BuildContext context, Map<String, dynamic> app) {
+    final status = (app['status'] as String?) ?? 'PENDING';
+    final method = (app['submission_method'] as String?) ?? 'email';
+    final submittedAt = app['submitted_at'] != null
+        ? DateTime.tryParse(app['submitted_at'] as String)
+        : null;
+    final dateLabel = submittedAt != null
+        ? '${submittedAt.day} ${_monthAbbr(submittedAt.month)}'.toUpperCase()
+        : '';
+
+    Color statusColor() {
+      switch (status) {
+        case 'APPROVED':
+          return FlutterFlowTheme.of(context).success;
+        case 'REJECTED':
+          return FlutterFlowTheme.of(context).error;
+        case 'UNDER REVIEW':
+          return FlutterFlowTheme.of(context).accent1;
+        case 'CONDITIONALLY APPROVED':
+          return FlutterFlowTheme.of(context).warning;
+        default:
+          return FlutterFlowTheme.of(context).secondary;
+      }
+    }
+
+    return Padding(
+      padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 8.0),
+      child: GestureDetector(
+        onTap: () => context.pushNamed(
+          'ApplicationDetail',
+          queryParameters: {'applicationId': app['id'] as String},
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: FlutterFlowTheme.of(context).secondaryBackground,
+            border: Border.all(
+              color: FlutterFlowTheme.of(context).divider,
+              width: 3.0,
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        (app['student_name'] as String?) ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: FlutterFlowTheme.of(context)
+                            .titleMedium
+                            .override(
+                              font: GoogleFonts.zillaSlab(
+                                  fontWeight: FontWeight.w600),
+                              color:
+                                  FlutterFlowTheme.of(context).primaryText,
+                              fontSize: 17.0,
+                            ),
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: statusColor(),
+                        border: Border.all(
+                          color: FlutterFlowTheme.of(context).divider,
+                          width: 2.0,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(
+                            8.0, 4.0, 8.0, 4.0),
+                        child: Text(
+                          status,
+                          style: FlutterFlowTheme.of(context)
+                              .labelSmall
+                              .override(
+                                font: GoogleFonts.inter(
+                                    fontWeight: FontWeight.bold),
+                                color: FlutterFlowTheme.of(context)
+                                    .primaryBackground,
+                                fontSize: 10.0,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'ID: ${(app['student_id'] as String?) ?? ''}',
+                      style: FlutterFlowTheme.of(context).bodySmall.override(
+                            font: GoogleFonts.inter(),
+                            color:
+                                FlutterFlowTheme.of(context).secondaryText,
+                            fontSize: 12.0,
+                          ),
+                    ),
+                    Text(
+                      dateLabel,
+                      style: FlutterFlowTheme.of(context).bodySmall.override(
+                            font: GoogleFonts.inter(),
+                            color:
+                                FlutterFlowTheme.of(context).secondaryText,
+                            fontSize: 12.0,
+                          ),
+                    ),
+                  ],
+                ),
+                Divider(
+                    thickness: 1.0,
+                    color: FlutterFlowTheme.of(context).divider),
+                Row(
+                  children: [
+                    Icon(
+                      method == 'email'
+                          ? Icons.email_rounded
+                          : Icons.language_rounded,
+                      color: FlutterFlowTheme.of(context).primary,
+                      size: 14.0,
+                    ),
+                    SizedBox(width: 4.0),
+                    Text(
+                      method == 'email' ? 'Via email' : 'Via web',
+                      style: FlutterFlowTheme.of(context).labelSmall.override(
+                            font: GoogleFonts.inter(
+                                fontWeight: FontWeight.bold),
+                            color: FlutterFlowTheme.of(context).primary,
+                            fontSize: 10.0,
+                          ),
+                    ),
+                  ],
+                ),
+              ].divide(SizedBox(height: 4.0)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _monthAbbr(int month) {
+    const months = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[month];
   }
 }
