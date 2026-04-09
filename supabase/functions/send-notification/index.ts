@@ -1,18 +1,19 @@
 // Ashesi IRB Manager — send-notification Edge Function
 //
-// Sends email (Graph API) and/or SMS (Twilio) to a student after a status update.
+// Sends email (Graph API) and/or SMS (Twilio) to a student after a status update,
+// and/or push notifications (FCM) to reviewers on new applications.
 // Runs in MOCK mode when secrets are absent — safe to deploy at any time.
 //
 // INPUT (JSON body):
 //   {
 //     application_id: string,
-//     channels: ('email' | 'sms')[],   // which channels to send on
-//     status: string,                  // new status label
-//     reviewer_note?: string           // optional note from reviewer
+//     channels: ('email' | 'sms' | 'push')[],
+//     status: string,                          // new status label
+//     reviewer_note?: string                   // optional note from reviewer
 //   }
 //
 // OUTPUT:
-//   { ok: true, results: { email?: 'sent'|'mocked'|'failed', sms?: 'sent'|'mocked'|'failed' } }
+//   { ok: true, results: { email?: 'sent'|'mocked'|'failed', sms?: ..., push?: ... } }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -30,8 +31,11 @@ const TWILIO_FROM   = Deno.env.get('TWILIO_PHONE_FROM')     ?? ''
 const SUPABASE_URL  = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_KEY  = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
+const FCM_SERVER_KEY = Deno.env.get('FCM_SERVER_KEY') ?? ''
+
 const MOCK_EMAIL    = !TENANT_ID || !CLIENT_ID || !CLIENT_SECRET || !IRB_MAILBOX
 const MOCK_SMS      = !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM
+const MOCK_PUSH     = !FCM_SERVER_KEY
 
 // ─── Graph API helpers ────────────────────────────────────────────────────────
 
@@ -122,6 +126,33 @@ async function sendSms(toPhone: string, status: string, subject: string): Promis
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Twilio SMS ${res.status}: ${text}`)
+  }
+}
+
+// ─── FCM helper ───────────────────────────────────────────────────────────────
+
+async function sendPushToTokens(
+  tokens: string[],
+  title: string,
+  body: string,
+  data: Record<string, string>
+): Promise<void> {
+  if (tokens.length === 0) return
+  const res = await fetch('https://fcm.googleapis.com/fcm/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `key=${FCM_SERVER_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      registration_ids: tokens,
+      notification: { title, body },
+      data,
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`FCM ${res.status}: ${text}`)
   }
 }
 
@@ -228,6 +259,47 @@ Deno.serve(async (req) => {
       message:   `Status updated to ${status}. Result: ${results.sms}`,
     }).then(({ error }) => {
       if (error) console.error('notifications log (sms):', error.message)
+    })
+  }
+
+  // ── Push ───────────────────────────────────────────────────────────────────
+
+  if (channels.includes('push')) {
+    // Fetch all reviewer FCM tokens
+    const { data: reviewers } = await supabase
+      .from('reviewers')
+      .select('device_token')
+      .not('device_token', 'is', null)
+
+    const tokens = (reviewers ?? [])
+      .map((r: { device_token: string }) => r.device_token)
+      .filter(Boolean)
+
+    if (MOCK_PUSH) {
+      console.log(`[MOCK] Push to ${tokens.length} reviewer(s): status=${status}`)
+      results.push = 'mocked'
+    } else {
+      try {
+        await sendPushToTokens(
+          tokens,
+          `IRB Application Update`,
+          `"${app.subject}" → ${status}`,
+          { application_id, status }
+        )
+        results.push = 'sent'
+      } catch (err) {
+        console.error('Push failed:', (err as Error).message)
+        results.push = 'failed'
+      }
+    }
+
+    await supabase.from('notifications').insert({
+      application_id,
+      type:      'push',
+      recipient: `${tokens.length} reviewer(s)`,
+      message:   `Status updated to ${status}. Result: ${results.push}`,
+    }).then(({ error }) => {
+      if (error) console.error('notifications log (push):', error.message)
     })
   }
 
