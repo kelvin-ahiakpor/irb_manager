@@ -31,11 +31,11 @@ const TWILIO_FROM   = Deno.env.get('TWILIO_PHONE_FROM')     ?? ''
 const SUPABASE_URL  = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_KEY  = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-const FCM_SERVER_KEY = Deno.env.get('FCM_SERVER_KEY') ?? ''
+const FCM_SA_B64    = Deno.env.get('FCM_SERVICE_ACCOUNT_B64') ?? ''
 
 const MOCK_EMAIL    = !TENANT_ID || !CLIENT_ID || !CLIENT_SECRET || !IRB_MAILBOX
 const MOCK_SMS      = !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM
-const MOCK_PUSH     = !FCM_SERVER_KEY
+const MOCK_PUSH     = !FCM_SA_B64
 
 // ─── Graph API helpers ────────────────────────────────────────────────────────
 
@@ -129,7 +129,51 @@ async function sendSms(toPhone: string, status: string, subject: string): Promis
   }
 }
 
-// ─── FCM helper ───────────────────────────────────────────────────────────────
+// ─── FCM v1 helpers ───────────────────────────────────────────────────────────
+
+function b64url(data: string): string {
+  return btoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+async function getFcmAccessToken(clientEmail: string, privateKeyPem: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+  const header  = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+  const payload = b64url(JSON.stringify({
+    iss:   clientEmail,
+    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600,
+  }))
+  const signingInput = `${header}.${payload}`
+
+  // Import RSA private key
+  const pemBody  = privateKeyPem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '')
+  const keyBytes = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0))
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', keyBytes,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign']
+  )
+
+  const sig = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5', cryptoKey,
+    new TextEncoder().encode(signingInput)
+  )
+  const jwt = `${signingInput}.${b64url(String.fromCharCode(...new Uint8Array(sig)))}`
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion:  jwt,
+    }),
+  })
+  const data = await res.json()
+  if (!data.access_token) throw new Error(`FCM OAuth failed: ${JSON.stringify(data)}`)
+  return data.access_token as string
+}
 
 async function sendPushToTokens(
   tokens: string[],
@@ -138,21 +182,28 @@ async function sendPushToTokens(
   data: Record<string, string>
 ): Promise<void> {
   if (tokens.length === 0) return
-  const res = await fetch('https://fcm.googleapis.com/fcm/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `key=${FCM_SERVER_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      registration_ids: tokens,
-      notification: { title, body },
-      data,
-    }),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`FCM ${res.status}: ${text}`)
+
+  const sa         = JSON.parse(atob(FCM_SA_B64))
+  const projectId  = sa.project_id as string
+  const token      = await getFcmAccessToken(sa.client_email, sa.private_key)
+  const url        = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`
+
+  // FCM v1 REST API sends one message at a time
+  for (const deviceToken of tokens) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: { token: deviceToken, notification: { title, body }, data },
+      }),
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      console.error(`FCM v1 send failed (${deviceToken.slice(-6)}): ${res.status} ${text}`)
+    }
   }
 }
 
