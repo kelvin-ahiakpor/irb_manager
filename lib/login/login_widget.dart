@@ -1,13 +1,17 @@
+import '/backend/supabase.dart';
 import '/components/brand_header_widget.dart';
+import '/index.dart' show ReviewerDashboardWidget;
 import '/components/microsoft_button_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
+import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_model.dart';
 export 'login_model.dart';
 
@@ -23,6 +27,7 @@ class LoginWidget extends StatefulWidget {
 
 class _LoginWidgetState extends State<LoginWidget> {
   late LoginModel _model;
+  late final StreamSubscription<AuthState> _authSubscription;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -31,13 +36,72 @@ class _LoginWidgetState extends State<LoginWidget> {
     super.initState();
     _model = createModel(context, () => LoginModel());
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
+    _authSubscription =
+        supabase.auth.onAuthStateChange.listen(_handleAuthChange);
+  }
+
+  Future<void> _handleAuthChange(AuthState state) async {
+    if (state.event != AuthChangeEvent.signedIn) return;
+
+    final email = state.session?.user.email;
+    if (email == null) {
+      await supabase.auth.signOut();
+      safeSetState(() =>
+          _model.errorMessage = 'Could not retrieve your account email.');
+      return;
+    }
+
+    safeSetState(() {
+      _model.isLoading = true;
+      _model.errorMessage = null;
+    });
+
+    try {
+      final row = await supabase
+          .from('reviewers')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      if (row != null) {
+        context.go(ReviewerDashboardWidget.routePath);
+      } else {
+        await supabase.auth.signOut();
+        safeSetState(() {
+          _model.isLoading = false;
+          _model.errorMessage =
+              'Access denied. $email is not an authorized IRB reviewer.';
+        });
+      }
+    } catch (e) {
+      await supabase.auth.signOut();
+      safeSetState(() {
+        _model.isLoading = false;
+        _model.errorMessage = 'An error occurred. Please try again.';
+      });
+    }
+  }
+
+  Future<void> _signInWithMicrosoft() async {
+    safeSetState(() => _model.errorMessage = null);
+    try {
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.azure,
+        redirectTo: 'ashesiirbmanager://ashesiirbmanager.com/login-callback',
+        authScreenLaunchMode: LaunchMode.externalBrowser,
+      );
+    } catch (e) {
+      safeSetState(() =>
+          _model.errorMessage = 'Could not launch sign-in. Please try again.');
+    }
   }
 
   @override
   void dispose() {
+    _authSubscription.cancel();
     _model.dispose();
-
     super.dispose();
   }
 
@@ -114,11 +178,23 @@ class _LoginWidgetState extends State<LoginWidget> {
                           mainAxisAlignment: MainAxisAlignment.start,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            wrapWithModel(
-                              model: _model.microsoftButtonModel,
-                              updateCallback: () => safeSetState(() {}),
-                              child: MicrosoftButtonWidget(),
-                            ),
+                            if (_model.isLoading)
+                              Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(
+                                  color: FlutterFlowTheme.of(context).primary,
+                                  strokeWidth: 2.0,
+                                ),
+                              )
+                            else
+                              GestureDetector(
+                                onTap: _signInWithMicrosoft,
+                                child: wrapWithModel(
+                                  model: _model.microsoftButtonModel,
+                                  updateCallback: () => safeSetState(() {}),
+                                  child: MicrosoftButtonWidget(),
+                                ),
+                              ),
                             Text(
                               'Use your Ashesi Microsoft 365 account',
                               style: FlutterFlowTheme.of(context)
@@ -146,6 +222,56 @@ class _LoginWidgetState extends State<LoginWidget> {
                         Container(
                           height: 32.0,
                         ),
+                        if (_model.errorMessage != null)
+                          Padding(
+                            padding: EdgeInsetsDirectional.fromSTEB(
+                                24.0, 0.0, 24.0, 0.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: FlutterFlowTheme.of(context)
+                                    .secondaryBackground,
+                                border: Border.all(
+                                  color: Color(0xFFC0392B),
+                                  width: 2.0,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.block_rounded,
+                                        color: Color(0xFFC0392B), size: 20.0),
+                                    SizedBox(width: 12.0),
+                                    Expanded(
+                                      child: Text(
+                                        _model.errorMessage!,
+                                        style: FlutterFlowTheme.of(context)
+                                            .labelSmall
+                                            .override(
+                                              font: GoogleFonts.inter(
+                                                fontWeight: FontWeight.bold,
+                                                fontStyle:
+                                                    FlutterFlowTheme.of(context)
+                                                        .labelSmall
+                                                        .fontStyle,
+                                              ),
+                                              color: Color(0xFFC0392B),
+                                              fontSize: 11.0,
+                                              letterSpacing: 0.0,
+                                              fontWeight: FontWeight.bold,
+                                              fontStyle:
+                                                  FlutterFlowTheme.of(context)
+                                                      .labelSmall
+                                                      .fontStyle,
+                                              lineHeight: 1.4,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         Padding(
                           padding: EdgeInsetsDirectional.fromSTEB(
                               24.0, 0.0, 24.0, 0.0),

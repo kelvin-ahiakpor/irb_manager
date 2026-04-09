@@ -1,3 +1,4 @@
+import 'package:app_links/app_links.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -16,6 +17,18 @@ void main() async {
 
   await SupabaseConfig.initialize();
   await FlutterFlowTheme.initialize();
+
+  // Handle OAuth deep link callbacks (Supabase Azure login redirect).
+  final appLinks = AppLinks();
+  // App already running — listen for incoming links.
+  appLinks.uriLinkStream.listen((uri) {
+    supabase.auth.getSessionFromUrl(uri);
+  });
+  // App cold-started via deep link.
+  final initialUri = await appLinks.getInitialAppLink();
+  if (initialUri != null) {
+    await supabase.auth.getSessionFromUrl(initialUri);
+  }
 
   runApp(MyApp());
 }

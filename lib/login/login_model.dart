@@ -13,6 +13,9 @@ import 'package:provider/provider.dart';
 class LoginModel extends FlutterFlowModel<LoginWidget> {
   ///  State fields for stateful widgets in this page.
 
+  bool isLoading = false;
+  String? errorMessage;
+
   // Model for brand_header component.
   late BrandHeaderModel brandHeaderModel;
   // Model for microsoft_button component.
