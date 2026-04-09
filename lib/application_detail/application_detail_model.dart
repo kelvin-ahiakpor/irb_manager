@@ -13,6 +13,12 @@ import 'package:provider/provider.dart';
 class ApplicationDetailModel extends FlutterFlowModel<ApplicationDetailWidget> {
   ///  State fields for stateful widgets in this page.
 
+  // Loaded from Supabase on init.
+  Map<String, dynamic>? application;
+  List<Map<String, dynamic>> attachments = [];
+  bool isLoading = true;
+  String? errorMessage;
+
   // Model for info_tile component.
   late InfoTileModel infoTileModel1;
   // Model for info_tile component.
