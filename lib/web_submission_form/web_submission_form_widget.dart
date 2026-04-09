@@ -1,3 +1,4 @@
+import '/backend/supabase.dart';
 import '/components/file_item_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -38,6 +39,71 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
     _model.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _submitForm() async {
+    final studentId = _model.studentIdController.text.trim();
+    final email     = _model.emailController.text.trim();
+    final phone     = _model.phoneController.text.trim();
+    final title     = _model.researchTitleController.text.trim();
+
+    if (studentId.isEmpty || email.isEmpty || title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Please fill in Student ID, Email, and Research Title.'),
+        backgroundColor: const Color(0xFFC0392B),
+      ));
+      return;
+    }
+
+    safeSetState(() => _model.isSubmitting = true);
+
+    try {
+      final result = await supabase.from('applications').insert({
+        'student_id':        studentId,
+        'student_name':      studentId, // name not collected separately — use ID as fallback
+        'student_email':     email,
+        'student_phone':     phone.isEmpty ? null : phone,
+        'subject':           title,
+        'body':              '',
+        'status':            'PENDING',
+        'submission_method': 'form',
+        'submitted_at':      DateTime.now().toIso8601String(),
+      }).select('id').single();
+
+      // Trigger push notifications to reviewers
+      await supabase.functions.invoke('send-notification', body: {
+        'application_id': result['id'],
+        'channels':       ['push'],
+        'status':         'PENDING',
+        'reviewer_note':  'New application submitted via form.',
+      });
+
+      if (!mounted) return;
+      safeSetState(() {
+        _model.isSubmitting = false;
+        _model.submitted    = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Application submitted successfully!'),
+        backgroundColor: const Color(0xFF27AE60),
+        duration: const Duration(seconds: 4),
+      ));
+
+      // Clear fields
+      _model.studentIdController.clear();
+      _model.emailController.clear();
+      _model.phoneController.clear();
+      _model.researchTitleController.clear();
+
+    } catch (e) {
+      if (!mounted) return;
+      safeSetState(() => _model.isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Submission failed. Please try again.'),
+        backgroundColor: const Color(0xFFC0392B),
+      ));
+    }
   }
 
   @override
@@ -383,9 +449,17 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Container(
-                                                          width: 0.0,
-                                                          height: 0.0,
+                                                        child: TextField(
+                                                          controller: _model.studentIdController,
+                                                          keyboardType: TextInputType.text,
+                                                          style: const TextStyle(fontSize: 13.0),
+                                                          decoration: InputDecoration(
+                                                            hintText: 'e.g. 12345678',
+                                                            hintStyle: const TextStyle(fontSize: 13.0, color: Colors.grey),
+                                                            isDense: true,
+                                                            contentPadding: EdgeInsets.zero,
+                                                            border: InputBorder.none,
+                                                          ),
                                                         ),
                                                       ),
                                                       Container(
@@ -487,12 +561,20 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                               height: 0.0,
                                                             ),
                                                             Expanded(
-                                                              flex: 1,
-                                                              child: Container(
-                                                                width: 0.0,
-                                                                height: 0.0,
-                                                              ),
-                                                            ),
+                                                        flex: 1,
+                                                        child: TextField(
+                                                          controller: _model.emailController,
+                                                          keyboardType: TextInputType.emailAddress,
+                                                          style: const TextStyle(fontSize: 13.0),
+                                                          decoration: InputDecoration(
+                                                            hintText: 'student@ashesi.edu.gh',
+                                                            hintStyle: const TextStyle(fontSize: 13.0, color: Colors.grey),
+                                                            isDense: true,
+                                                            contentPadding: EdgeInsets.zero,
+                                                            border: InputBorder.none,
+                                                          ),
+                                                        ),
+                                                      ),
                                                             Container(
                                                               width: 0.0,
                                                               height: 0.0,
@@ -586,12 +668,20 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                               height: 0.0,
                                                             ),
                                                             Expanded(
-                                                              flex: 1,
-                                                              child: Container(
-                                                                width: 0.0,
-                                                                height: 0.0,
-                                                              ),
-                                                            ),
+                                                        flex: 1,
+                                                        child: TextField(
+                                                          controller: _model.phoneController,
+                                                          keyboardType: TextInputType.phone,
+                                                          style: const TextStyle(fontSize: 13.0),
+                                                          decoration: InputDecoration(
+                                                            hintText: '+233 XX XXX XXXX',
+                                                            hintStyle: const TextStyle(fontSize: 13.0, color: Colors.grey),
+                                                            isDense: true,
+                                                            contentPadding: EdgeInsets.zero,
+                                                            border: InputBorder.none,
+                                                          ),
+                                                        ),
+                                                      ),
                                                             Container(
                                                               width: 0.0,
                                                               height: 0.0,
@@ -782,9 +872,17 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Container(
-                                                          width: 0.0,
-                                                          height: 0.0,
+                                                        child: TextField(
+                                                          controller: _model.researchTitleController,
+                                                          keyboardType: TextInputType.text,
+                                                          style: const TextStyle(fontSize: 13.0),
+                                                          decoration: InputDecoration(
+                                                            hintText: 'Brief title of your research',
+                                                            hintStyle: const TextStyle(fontSize: 13.0, color: Colors.grey),
+                                                            isDense: true,
+                                                            contentPadding: EdgeInsets.zero,
+                                                            border: InputBorder.none,
+                                                          ),
                                                         ),
                                                       ),
                                                       Container(
@@ -1336,11 +1434,20 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                     ),
                                   ].divide(SizedBox(width: 8.0)),
                                 ),
-                                Container(
+                                GestureDetector(
+                                  onTap: _model.isSubmitting ? null : _submitForm,
+                                  child: Container(
                                   decoration: BoxDecoration(
-                                    color: FlutterFlowTheme.of(context).primary,
+                                    color: _model.isSubmitting
+                                        ? FlutterFlowTheme.of(context).secondaryText
+                                        : FlutterFlowTheme.of(context).primary,
                                   ),
-                                  child: Align(
+                                  child: _model.isSubmitting
+                                      ? Padding(
+                                          padding: EdgeInsets.all(16.0),
+                                          child: Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                                        )
+                                      : Align(
                                     alignment: AlignmentDirectional(0.0, 0.0),
                                     child: Stack(
                                       alignment: AlignmentDirectional(0.0, 0.0),
@@ -1400,6 +1507,7 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                         ),
                                       ],
                                     ),
+                                  ),
                                   ),
                                 ),
                               ].divide(SizedBox(height: 16.0)),

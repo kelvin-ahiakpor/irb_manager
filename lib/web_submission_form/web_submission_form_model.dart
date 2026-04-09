@@ -18,15 +18,38 @@ class WebSubmissionFormModel extends FlutterFlowModel<WebSubmissionFormWidget> {
   // State field(s) for Checkbox widget.
   bool? checkboxValue;
 
+  // Form controllers
+  late TextEditingController studentIdController;
+  late TextEditingController studentNameController;
+  late TextEditingController emailController;
+  late TextEditingController phoneController;
+  late TextEditingController researchTitleController;
+  late TextEditingController researchDescController;
+
+  bool isSubmitting = false;
+  bool submitted = false;
+
   @override
   void initState(BuildContext context) {
     fileItemModel1 = createModel(context, () => FileItemModel());
     fileItemModel2 = createModel(context, () => FileItemModel());
+    studentIdController    = TextEditingController();
+    studentNameController  = TextEditingController();
+    emailController        = TextEditingController();
+    phoneController        = TextEditingController();
+    researchTitleController = TextEditingController();
+    researchDescController  = TextEditingController();
   }
 
   @override
   void dispose() {
     fileItemModel1.dispose();
     fileItemModel2.dispose();
+    studentIdController.dispose();
+    studentNameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    researchTitleController.dispose();
+    researchDescController.dispose();
   }
 }
