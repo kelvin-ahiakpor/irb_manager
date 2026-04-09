@@ -70,17 +70,26 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: ApplicationDetailWidget.routeName,
           path: ApplicationDetailWidget.routePath,
-          builder: (context, params) => ApplicationDetailWidget(),
+          builder: (context, params) => ApplicationDetailWidget(
+            applicationId:
+                params.getParam('applicationId', ParamType.String),
+          ),
         ),
         FFRoute(
           name: DocumentViewerWidget.routeName,
           path: DocumentViewerWidget.routePath,
-          builder: (context, params) => DocumentViewerWidget(),
+          builder: (context, params) => DocumentViewerWidget(
+            storagePath: params.getParam('storagePath', ParamType.String),
+            fileName: params.getParam('fileName', ParamType.String),
+          ),
         ),
         FFRoute(
           name: UpdateStatusSheetWidget.routeName,
           path: UpdateStatusSheetWidget.routePath,
-          builder: (context, params) => UpdateStatusSheetWidget(),
+          builder: (context, params) => UpdateStatusSheetWidget(
+            applicationId:
+                params.getParam('applicationId', ParamType.String),
+          ),
         ),
         FFRoute(
           name: StatusHistoryWidget.routeName,
