@@ -4,7 +4,9 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
+import 'dart:async';
 import 'dart:ui';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +26,7 @@ class ReviewerDashboardWidget extends StatefulWidget {
 
 class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
   late ReviewerDashboardModel _model;
+  late final StreamSubscription<List<ConnectivityResult>> _connectivitySub;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -32,11 +35,45 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
     super.initState();
     _model = createModel(context, () => ReviewerDashboardModel());
 
+    // Check initial connectivity
+    Connectivity().checkConnectivity().then((results) {
+      final offline = results.every((r) => r == ConnectivityResult.none);
+      if (mounted) safeSetState(() => _model.isOffline = offline);
+    });
+
+    // Listen for connectivity changes
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) async {
+      final offline = results.every((r) => r == ConnectivityResult.none);
+      if (mounted) safeSetState(() => _model.isOffline = offline);
+
+      // Back online — flush queued status updates
+      if (!offline) {
+        final queue = _model.loadQueue();
+        if (queue.isNotEmpty) {
+          for (final item in queue) {
+            try {
+              await supabase
+                  .from('applications')
+                  .update({'status': item['status']})
+                  .eq('id', item['application_id']);
+              await supabase.from('status_history').insert({
+                'application_id': item['application_id'],
+                'status':         item['status'],
+                'changed_by':     supabase.auth.currentUser?.id,
+              });
+            } catch (_) {}
+          }
+          _model.clearQueue();
+        }
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
   }
 
   @override
   void dispose() {
+    _connectivitySub.cancel();
     _model.dispose();
 
     super.dispose();
@@ -54,6 +91,26 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_model.isOffline)
+              Container(
+                color: const Color(0xFFC0392B),
+                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16.0),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      'You\'re offline. Showing cached data.',
+                      style: FlutterFlowTheme.of(context).bodySmall.override(
+                        font: GoogleFonts.inter(),
+                        color: Colors.white,
+                        fontSize: 12.0,
+                        letterSpacing: 0.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Container(
               decoration: BoxDecoration(
                 color: FlutterFlowTheme.of(context).primaryBackground,
@@ -351,7 +408,19 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                           .stream(primaryKey: ['id'])
                           .order('submitted_at', ascending: false),
                       builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
+                        // Write to cache whenever live data arrives
+                        if (snapshot.hasData) {
+                          _model.cacheApplications(snapshot.data!);
+                        }
+
+                        // Resolve data: live → cache → empty
+                        final List<Map<String, dynamic>> all;
+                        if (snapshot.hasData) {
+                          all = snapshot.data!;
+                        } else if (_model.isOffline) {
+                          all = _model.loadCachedApplications();
+                        } else {
+                          // Online but still loading
                           return Padding(
                             padding: EdgeInsets.symmetric(vertical: 32.0),
                             child: Center(
@@ -362,7 +431,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                             ),
                           );
                         }
-                        final all = snapshot.data!;
+
                         final filtered = _model.activeFilter == 'ALL'
                             ? all
                             : all.where((a) {

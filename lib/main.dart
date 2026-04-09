@@ -1,5 +1,6 @@
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -18,6 +19,8 @@ void main() async {
 
   await SupabaseConfig.initialize();
   await FlutterFlowTheme.initialize();
+  await Hive.initFlutter();
+  await Hive.openBox('irb_cache');
 
   if (!kIsWeb) {
     // Handle OAuth deep link callbacks (Supabase Azure login redirect).
