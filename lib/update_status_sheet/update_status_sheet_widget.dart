@@ -1,3 +1,4 @@
+import '/backend/supabase.dart';
 import '/components/std_switch_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -10,7 +11,9 @@ import 'update_status_sheet_model.dart';
 export 'update_status_sheet_model.dart';
 
 class UpdateStatusSheetWidget extends StatefulWidget {
-  const UpdateStatusSheetWidget({super.key});
+  const UpdateStatusSheetWidget({super.key, this.applicationId});
+
+  final String? applicationId;
 
   static String routeName = 'UpdateStatusSheet';
   static String routePath = '/updateStatusSheet';
@@ -67,9 +70,12 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
+                      GestureDetector(
+                        onTap: () => context.safePop(),
+                        child: Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                        ),
                       ),
                       Text(
                         'APPLICATION DETAIL',
@@ -403,317 +409,76 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
                                       children: [
-                                        Padding(
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 0.0, 0.0, 4.0),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondaryBackground,
-                                              borderRadius:
-                                                  BorderRadius.circular(0.0),
-                                              border: Border.all(
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .divider,
-                                                width: 2.0,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding: EdgeInsets.all(16.0),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.max,
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.start,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
+                                        for (final option in [
+                                          {'value': 'UNDER_REVIEW', 'label': 'UNDER REVIEW', 'color': const Color(0xFF3B82F6)},
+                                          {'value': 'CONDITIONALLY_APPROVED', 'label': 'CONDITIONALLY APPROVED', 'color': const Color(0xFFF59E0B)},
+                                          {'value': 'APPROVED', 'label': 'APPROVED', 'color': const Color(0xFF2E7D52)},
+                                          {'value': 'REJECTED', 'label': 'REJECTED', 'color': const Color(0xFFC0392B)},
+                                        ])
+                                          Padding(
+                                            padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
+                                            child: GestureDetector(
+                                              onTap: () => safeSetState(() => _model.selectedStatus = option['value'] as String),
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: _model.selectedStatus == option['value']
+                                                      ? FlutterFlowTheme.of(context).primary
+                                                      : FlutterFlowTheme.of(context).secondaryBackground,
+                                                  borderRadius: BorderRadius.circular(0.0),
+                                                  border: Border.all(
+                                                    color: FlutterFlowTheme.of(context).divider,
+                                                    width: 2.0,
+                                                  ),
+                                                ),
+                                                child: Padding(
+                                                  padding: EdgeInsets.all(16.0),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.max,
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    crossAxisAlignment: CrossAxisAlignment.center,
                                                     children: [
-                                                      Container(
-                                                        width: 12.0,
-                                                        height: 12.0,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0xFF3B82F6),
-                                                          border: Border.all(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .divider,
-                                                            width: 2.0,
+                                                      Row(
+                                                        mainAxisSize: MainAxisSize.max,
+                                                        mainAxisAlignment: MainAxisAlignment.start,
+                                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                                        children: [
+                                                          Container(
+                                                            width: 12.0,
+                                                            height: 12.0,
+                                                            decoration: BoxDecoration(
+                                                              color: option['color'] as Color,
+                                                              border: Border.all(
+                                                                color: FlutterFlowTheme.of(context).divider,
+                                                                width: 2.0,
+                                                              ),
+                                                            ),
                                                           ),
-                                                        ),
+                                                          Text(
+                                                            option['label'] as String,
+                                                            style: TextStyle(
+                                                              color: _model.selectedStatus == option['value']
+                                                                  ? FlutterFlowTheme.of(context).primaryBackground
+                                                                  : FlutterFlowTheme.of(context).primaryText,
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ].divide(SizedBox(width: 16.0)),
                                                       ),
-                                                      Text(
-                                                        'UNDER REVIEW',
-                                                        style: TextStyle(
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primaryText,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
+                                                      Icon(
+                                                        _model.selectedStatus == option['value']
+                                                            ? Icons.check_circle_rounded
+                                                            : Icons.radio_button_unchecked_rounded,
+                                                        color: _model.selectedStatus == option['value']
+                                                            ? FlutterFlowTheme.of(context).primaryBackground
+                                                            : FlutterFlowTheme.of(context).divider,
+                                                        size: 20.0,
                                                       ),
-                                                    ].divide(
-                                                        SizedBox(width: 16.0)),
+                                                    ],
                                                   ),
-                                                  Icon(
-                                                    Icons
-                                                        .radio_button_unchecked_rounded,
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .divider,
-                                                    size: 20.0,
-                                                  ),
-                                                ],
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        Padding(
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 0.0, 0.0, 4.0),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primary,
-                                              borderRadius:
-                                                  BorderRadius.circular(0.0),
-                                              border: Border.all(
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .divider,
-                                                width: 2.0,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding: EdgeInsets.all(16.0),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.max,
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.start,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Container(
-                                                        width: 12.0,
-                                                        height: 12.0,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0xFFF59E0B),
-                                                          border: Border.all(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .divider,
-                                                            width: 2.0,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        'CONDITIONALLY APPROVED',
-                                                        style: TextStyle(
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primaryBackground,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ].divide(
-                                                        SizedBox(width: 16.0)),
-                                                  ),
-                                                  Icon(
-                                                    Icons.check_circle_rounded,
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .primaryBackground,
-                                                    size: 20.0,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 0.0, 0.0, 4.0),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondaryBackground,
-                                              borderRadius:
-                                                  BorderRadius.circular(0.0),
-                                              border: Border.all(
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .divider,
-                                                width: 2.0,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding: EdgeInsets.all(16.0),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.max,
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.start,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Container(
-                                                        width: 12.0,
-                                                        height: 12.0,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0xFF2E7D52),
-                                                          border: Border.all(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .divider,
-                                                            width: 2.0,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        'APPROVED',
-                                                        style: TextStyle(
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primaryText,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ].divide(
-                                                        SizedBox(width: 16.0)),
-                                                  ),
-                                                  Icon(
-                                                    Icons
-                                                        .radio_button_unchecked_rounded,
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .divider,
-                                                    size: 20.0,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 0.0, 0.0, 4.0),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondaryBackground,
-                                              borderRadius:
-                                                  BorderRadius.circular(0.0),
-                                              border: Border.all(
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .divider,
-                                                width: 2.0,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding: EdgeInsets.all(16.0),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.max,
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.start,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Container(
-                                                        width: 12.0,
-                                                        height: 12.0,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0xFFC0392B),
-                                                          border: Border.all(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .divider,
-                                                            width: 2.0,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        'REJECTED',
-                                                        style: TextStyle(
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primaryText,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ].divide(
-                                                        SizedBox(width: 16.0)),
-                                                  ),
-                                                  Icon(
-                                                    Icons
-                                                        .radio_button_unchecked_rounded,
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .divider,
-                                                    size: 20.0,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
                                       ].divide(SizedBox(height: 0.0)),
                                     ),
                                   ],
@@ -1152,10 +917,33 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
                                       children: [
-                                        Container(
+                                        GestureDetector(
+                                          onTap: _model.isSubmitting || _model.selectedStatus == null
+                                              ? null
+                                              : () async {
+                                                  final id = widget.applicationId;
+                                                  if (id == null || id.isEmpty) return;
+                                                  safeSetState(() => _model.isSubmitting = true);
+                                                  try {
+                                                    await supabase
+                                                        .from('applications')
+                                                        .update({'status': _model.selectedStatus})
+                                                        .eq('id', id);
+                                                    await supabase.from('status_history').insert({
+                                                      'application_id': id,
+                                                      'status': _model.selectedStatus,
+                                                      'changed_by': supabase.auth.currentUser?.id,
+                                                    });
+                                                    if (mounted) context.safePop();
+                                                  } catch (_) {
+                                                    safeSetState(() => _model.isSubmitting = false);
+                                                  }
+                                                },
+                                          child: Container(
                                           decoration: BoxDecoration(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
+                                            color: (_model.selectedStatus == null || _model.isSubmitting)
+                                                ? FlutterFlowTheme.of(context).secondaryText
+                                                : FlutterFlowTheme.of(context).primary,
                                           ),
                                           child: Align(
                                             alignment:
@@ -1227,7 +1015,10 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                             ),
                                           ),
                                         ),
-                                        Container(
+                                        ),
+                                        GestureDetector(
+                                          onTap: () => context.safePop(),
+                                          child: Container(
                                           decoration: BoxDecoration(
                                             color: Colors.transparent,
                                           ),
@@ -1300,6 +1091,7 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                               ],
                                             ),
                                           ),
+                                        ),
                                         ),
                                       ].divide(SizedBox(height: 8.0)),
                                     ),

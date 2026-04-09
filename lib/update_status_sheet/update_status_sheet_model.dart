@@ -11,6 +11,9 @@ import 'package:provider/provider.dart';
 class UpdateStatusSheetModel extends FlutterFlowModel<UpdateStatusSheetWidget> {
   ///  State fields for stateful widgets in this page.
 
+  String? selectedStatus;
+  bool isSubmitting = false;
+
   // Model for std_switch component.
   late StdSwitchModel stdSwitchModel;
 
