@@ -1,3 +1,4 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "cmake.sourceDirectory": "/Users/kelvin/Documents/ASHESI/4TH YEAR/Mobile App/irb_manager/windows/flutter"
 }
