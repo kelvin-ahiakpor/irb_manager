@@ -418,19 +418,24 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                         final List<Map<String, dynamic>> all;
                         if (snapshot.hasData) {
                           all = snapshot.data!;
-                        } else if (_model.isOffline) {
-                          all = _model.loadCachedApplications();
                         } else {
-                          // Online but still loading
-                          return Padding(
-                            padding: EdgeInsets.symmetric(vertical: 32.0),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: FlutterFlowTheme.of(context).primary,
-                                strokeWidth: 2,
+                          final cached = _model.loadCachedApplications();
+                          if (cached.isNotEmpty) {
+                            all = cached;
+                          } else if (_model.isOffline) {
+                            all = [];
+                          } else {
+                            // Online, no cache yet — show spinner
+                            return Padding(
+                              padding: EdgeInsets.symmetric(vertical: 32.0),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: FlutterFlowTheme.of(context).primary,
+                                  strokeWidth: 2,
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          }
                         }
 
                         final filtered = _model.activeFilter == 'ALL'

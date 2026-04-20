@@ -2,7 +2,10 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/login/login_widget.dart';
+import '/reviewer_dashboard/reviewer_dashboard_widget.dart';
 import 'dart:ui';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -31,9 +34,16 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
     super.initState();
     _model = createModel(context, () => SplashScreenModel());
 
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 2), () async {
       if (!mounted) return;
-      context.go(LoginWidget.routePath);
+      final results = await Connectivity().checkConnectivity();
+      final offline = results.every((r) => r == ConnectivityResult.none);
+      final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
+      if (offline && cachedEmail != null) {
+        context.go(ReviewerDashboardWidget.routePath);
+      } else {
+        context.go(LoginWidget.routePath);
+      }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));

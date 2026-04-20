@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -77,6 +78,7 @@ class _LoginWidgetState extends State<LoginWidget> {
       if (!mounted) return;
 
       if (row != null) {
+        Hive.box('irb_cache').put('reviewer_email', email);
         if (!kIsWeb) {
           try {
             final token = await FirebaseMessaging.instance.getToken();
