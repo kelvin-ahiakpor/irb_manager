@@ -15,6 +15,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL         = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const CRON_SECRET          = Deno.env.get('CRON_SECRET')!
 
 // ─── Mock email payloads ──────────────────────────────────────────────────────
 // These simulate what the real Graph API would return from the IRB inbox.
@@ -70,8 +71,15 @@ function pickMockEmail() {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
   try {
+    if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     const mock     = pickMockEmail()
 

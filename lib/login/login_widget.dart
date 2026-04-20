@@ -56,7 +56,7 @@ class _LoginWidgetState extends State<LoginWidget> {
   Future<void> _handleSignedInSession(Session? session) async {
     final email = session?.user.email;
     if (email == null) {
-      await supabase.auth.signOut();
+      await _safeSignOut();
       safeSetState(
           () => _model.errorMessage = 'Could not retrieve your account email.');
       return;
@@ -90,7 +90,7 @@ class _LoginWidgetState extends State<LoginWidget> {
         if (!mounted) return;
         context.go(ReviewerDashboardWidget.routePath);
       } else {
-        await supabase.auth.signOut();
+        await _safeSignOut();
         safeSetState(() {
           _model.isLoading = false;
           _model.errorMessage =
@@ -99,7 +99,16 @@ class _LoginWidgetState extends State<LoginWidget> {
       }
     } catch (e) {
       debugPrint('IRB login error: $e');
-      await supabase.auth.signOut();
+      if (_isRetryableNetworkError(e)) {
+        safeSetState(() {
+          _model.isLoading = false;
+          _model.errorMessage =
+              'Could not reach Supabase. Check your internet connection and try again.';
+        });
+        return;
+      }
+
+      await _safeSignOut();
       safeSetState(() {
         _model.isLoading = false;
         _model.errorMessage = 'An error occurred. Please try again.';
@@ -117,10 +126,28 @@ class _LoginWidgetState extends State<LoginWidget> {
 
     safeSetState(() {
       _model.isLoading = false;
-      _model.errorMessage = error is AuthException
-          ? 'Sign-in failed: ${error.message}'
-          : 'Sign-in failed. Please try again.';
+      _model.errorMessage = _isRetryableNetworkError(error)
+          ? 'Could not reach Supabase. Check your internet connection and try again.'
+          : error is AuthException
+              ? 'Sign-in failed: ${error.message}'
+              : 'Sign-in failed. Please try again.';
     });
+  }
+
+  bool _isRetryableNetworkError(Object error) {
+    if (error is AuthRetryableFetchException) return true;
+    final message = error.toString();
+    return message.contains('Failed host lookup') ||
+        message.contains('SocketException') ||
+        message.contains('Connection timed out');
+  }
+
+  Future<void> _safeSignOut() async {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      debugPrint('Supabase sign-out failed: $e');
+    }
   }
 
   Future<void> _signInWithMicrosoft() async {

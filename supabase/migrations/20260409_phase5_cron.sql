@@ -2,6 +2,11 @@
 -- Ashesi IRB Manager — Phase 5: pg_cron job
 -- Calls the mailbox-poller Edge Function every 5 minutes.
 -- Run AFTER deploying the Edge Function.
+--
+-- Do not commit real secrets in this file. Replace the placeholder locally
+-- before running the SQL, or schedule this through a secrets-aware deployment
+-- step. The mailbox-poller function must be deployed with --no-verify-jwt and
+-- must validate this x-cron-secret header internally.
 -- =============================================================
 
 create extension if not exists pg_net;
@@ -18,7 +23,7 @@ select cron.schedule(
   $$
   select net.http_post(
     url     := 'https://tznryskacildjctzznpe.supabase.co/functions/v1/mailbox-poller',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6bnJ5c2thY2lsZGpjdHp6bnBlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4NzI1MiwiZXhwIjoyMDkxMjYzMjUyfQ.rPuoqkhJxJ90mlFuK03JP7tR_yHFbcwyKVPleBmwBQg"}'::jsonb,
+    headers := '{"Content-Type":"application/json","x-cron-secret":"<CRON_SECRET>"}'::jsonb,
     body    := '{}'::jsonb
   );
   $$

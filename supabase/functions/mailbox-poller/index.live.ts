@@ -16,7 +16,7 @@
 //
 // SECRETS REQUIRED (already set via `supabase secrets set`):
 //   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, IRB_MAILBOX
-//   SB_URL, SB_SERVICE_ROLE_KEY
+//   SB_URL, SB_SERVICE_ROLE_KEY, CRON_SECRET
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -26,6 +26,7 @@ const CLIENT_SECRET        = Deno.env.get('AZURE_CLIENT_SECRET')!
 const IRB_MAILBOX          = Deno.env.get('IRB_MAILBOX')!
 const SUPABASE_URL         = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const CRON_SECRET          = Deno.env.get('CRON_SECRET')!
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -227,8 +228,15 @@ async function processEmail(
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
   try {
+    if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const token    = await getAccessToken()
     const emails   = await fetchUnreadEmails(token)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
