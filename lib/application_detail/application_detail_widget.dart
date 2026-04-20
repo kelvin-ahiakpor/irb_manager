@@ -369,38 +369,43 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                     children: [
                                       Row(
                                         mainAxisSize: MainAxisSize.max,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          Text(
-                                            (app['subject'] as String?) ?? '',
-                                            style: FlutterFlowTheme.of(context)
-                                                .titleMedium
-                                                .override(
-                                                  font: GoogleFonts.zillaSlab(
+                                          Expanded(
+                                            child: Text(
+                                              (app['subject'] as String?) ?? '',
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: FlutterFlowTheme.of(
+                                                      context)
+                                                  .titleMedium
+                                                  .override(
+                                                    font: GoogleFonts.zillaSlab(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontStyle:
+                                                          FlutterFlowTheme.of(
+                                                                  context)
+                                                              .titleMedium
+                                                              .fontStyle,
+                                                    ),
+                                                    color: FlutterFlowTheme.of(
+                                                            context)
+                                                        .primaryText,
+                                                    fontSize: 17.0,
+                                                    letterSpacing: 0.0,
                                                     fontWeight: FontWeight.bold,
                                                     fontStyle:
                                                         FlutterFlowTheme.of(
                                                                 context)
                                                             .titleMedium
                                                             .fontStyle,
+                                                    lineHeight: 1.3,
                                                   ),
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primaryText,
-                                                  fontSize: 17.0,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .titleMedium
-                                                          .fontStyle,
-                                                  lineHeight: 1.3,
-                                                ),
+                                            ),
                                           ),
+                                          SizedBox(width: 8.0),
                                           Icon(
                                             Icons.language_rounded,
                                             color: FlutterFlowTheme.of(context)
@@ -409,11 +414,13 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                           ),
                                         ],
                                       ),
+                                      SizedBox(height: 10.0),
                                       Divider(
                                         thickness: 1.0,
                                         color: FlutterFlowTheme.of(context)
                                             .divider,
                                       ),
+                                      SizedBox(height: 10.0),
                                       Text(
                                         (app['body'] as String?) ?? '',
                                         style: FlutterFlowTheme.of(context)
@@ -439,6 +446,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                               lineHeight: 1.5,
                                             ),
                                       ),
+                                      SizedBox(height: 14.0),
                                       Text(
                                         'Submitted ${_formatSubmittedDate(app['submitted_at'])} via ${(app['submission_method'] as String?) == 'email' ? 'Email' : 'Web Form'}',
                                         style: FlutterFlowTheme.of(context)
@@ -464,7 +472,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                               lineHeight: 1.2,
                                             ),
                                       ),
-                                    ].divide(SizedBox(height: 16.0)),
+                                    ],
                                   ),
                                 ),
                               ),
