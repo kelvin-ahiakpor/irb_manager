@@ -6,6 +6,8 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -75,6 +77,16 @@ class _LoginWidgetState extends State<LoginWidget> {
       if (!mounted) return;
 
       if (row != null) {
+        if (!kIsWeb) {
+          try {
+            final token = await FirebaseMessaging.instance.getToken();
+            if (token != null) {
+              await supabase
+                  .from('reviewers')
+                  .update({'device_token': token}).eq('email', email);
+            }
+          } catch (_) {}
+        }
         if (!mounted) return;
         context.go(ReviewerDashboardWidget.routePath);
       } else {

@@ -84,9 +84,10 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
     return Scaffold(
       key: scaffoldKey,
       backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-      body: SingleChildScrollView(
-        primary: false,
-        child: Column(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          primary: false,
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1688,6 +1689,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
