@@ -3,12 +3,10 @@ import '/components/info_tile_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'application_detail_model.dart';
 export 'application_detail_model.dart';
 
@@ -562,8 +560,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                         .labelLarge
                                         .fontStyle,
                                   ),
-                                  color:
-                                      FlutterFlowTheme.of(context).primaryText,
+                                  color: Colors.white,
                                   fontSize: 14.0,
                                   letterSpacing: 0.0,
                                   fontWeight: FontWeight.w900,
@@ -617,12 +614,17 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                     Expanded(
                       flex: 1,
                       child: GestureDetector(
-                        onTap: () => context.pushNamed(
-                          'UpdateStatusSheet',
-                          queryParameters: {
-                            'applicationId': widget.applicationId ?? '',
-                          },
-                        ),
+                        onTap: () async {
+                          await context.pushNamed(
+                            'UpdateStatusSheet',
+                            queryParameters: {
+                              'applicationId': widget.applicationId ?? '',
+                              'currentStatus':
+                                  (app['status'] as String?) ?? 'PENDING',
+                            },
+                          );
+                          await _loadApplication();
+                        },
                         child: Container(
                           decoration: BoxDecoration(
                             color: FlutterFlowTheme.of(context).primary,

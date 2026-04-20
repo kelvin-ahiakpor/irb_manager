@@ -46,9 +46,8 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: '_initialize',
           path: '/',
-          builder: (context, _) => kIsWeb
-              ? WebSubmissionFormWidget()
-              : SplashScreenWidget(),
+          builder: (context, _) =>
+              kIsWeb ? WebSubmissionFormWidget() : SplashScreenWidget(),
         ),
         FFRoute(
           name: HomePageWidget.routeName,
@@ -74,8 +73,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: ApplicationDetailWidget.routeName,
           path: ApplicationDetailWidget.routePath,
           builder: (context, params) => ApplicationDetailWidget(
-            applicationId:
-                params.getParam('applicationId', ParamType.String),
+            applicationId: params.getParam('applicationId', ParamType.String),
           ),
         ),
         FFRoute(
@@ -90,8 +88,8 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: UpdateStatusSheetWidget.routeName,
           path: UpdateStatusSheetWidget.routePath,
           builder: (context, params) => UpdateStatusSheetWidget(
-            applicationId:
-                params.getParam('applicationId', ParamType.String),
+            applicationId: params.getParam('applicationId', ParamType.String),
+            currentStatus: params.getParam('currentStatus', ParamType.String),
           ),
         ),
         FFRoute(

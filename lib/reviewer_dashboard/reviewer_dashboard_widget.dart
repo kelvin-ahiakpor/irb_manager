@@ -116,14 +116,25 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
       if (!offline) {
         final queue = _model.loadQueue();
         if (queue.isNotEmpty) {
+          String? reviewerId;
+          final email = supabase.auth.currentUser?.email;
+          if (email != null) {
+            final reviewer = await supabase
+                .from('reviewers')
+                .select('id')
+                .eq('email', email)
+                .maybeSingle();
+            reviewerId = reviewer?['id'] as String?;
+          }
           for (final item in queue) {
             try {
               await supabase.from('applications').update(
                   {'status': item['status']}).eq('id', item['application_id']);
               await supabase.from('status_history').insert({
                 'application_id': item['application_id'],
-                'status': item['status'],
-                'changed_by': supabase.auth.currentUser?.id,
+                'changed_by': reviewerId,
+                'old_status': null,
+                'new_status': item['status'],
               });
             } catch (_) {}
           }
@@ -141,6 +152,60 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
     _model.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _refreshApplications() async {
+    try {
+      final applications = await supabase
+          .from('applications')
+          .select()
+          .order('submitted_at', ascending: false);
+      final rows = List<Map<String, dynamic>>.from(applications);
+      final merged = _mergeApplications(_latestApplications, rows);
+      _model.cacheApplications(merged);
+      if (mounted) {
+        safeSetState(() => _latestApplications = merged);
+      }
+    } catch (_) {
+      // Keep the current stream/cache data if the manual refresh fails.
+    }
+  }
+
+  List<Map<String, dynamic>> _mergeApplications(
+    List<Map<String, dynamic>> current,
+    List<Map<String, dynamic>> incoming,
+  ) {
+    final byId = <String, Map<String, dynamic>>{};
+    for (final app in [...current, ...incoming]) {
+      final id = app['id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      final existing = byId[id];
+      if (existing == null || _isNewerApplication(app, existing)) {
+        byId[id] = app;
+      }
+    }
+    final merged = byId.values.toList();
+    merged.sort((a, b) {
+      final aSubmitted = _parseDate(a['submitted_at']);
+      final bSubmitted = _parseDate(b['submitted_at']);
+      return bSubmitted.compareTo(aSubmitted);
+    });
+    return merged;
+  }
+
+  bool _isNewerApplication(
+    Map<String, dynamic> candidate,
+    Map<String, dynamic> existing,
+  ) {
+    final candidateUpdated = _parseDate(candidate['updated_at']);
+    final existingUpdated = _parseDate(existing['updated_at']);
+    return candidateUpdated.isAfter(existingUpdated) ||
+        candidateUpdated.isAtSameMomentAs(existingUpdated);
+  }
+
+  DateTime _parseDate(Object? value) {
+    return DateTime.tryParse(value?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
 
   @override
@@ -476,8 +541,11 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                         builder: (context, snapshot) {
                           // Write to cache whenever live data arrives
                           if (snapshot.hasData) {
-                            _latestApplications = snapshot.data!;
-                            _model.cacheApplications(snapshot.data!);
+                            _latestApplications = _mergeApplications(
+                              _latestApplications,
+                              snapshot.data!,
+                            );
+                            _model.cacheApplications(_latestApplications);
                           }
 
                           // Resolve data: live → cache → empty
@@ -1889,7 +1957,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
     return Padding(
       padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 8.0),
       child: GestureDetector(
-        onTap: () {
+        onTap: () async {
           final applicationId = app['id'] as String? ?? '';
           if (!_isUuid(applicationId)) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1901,10 +1969,11 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
             );
             return;
           }
-          context.pushNamed(
+          await context.pushNamed(
             'ApplicationDetail',
             queryParameters: {'applicationId': applicationId},
           );
+          await _refreshApplications();
         },
         child: Container(
           decoration: BoxDecoration(
