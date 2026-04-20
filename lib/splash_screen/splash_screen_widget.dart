@@ -1,16 +1,15 @@
+import '/backend/supabase.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/login/login_widget.dart';
 import '/reviewer_dashboard/reviewer_dashboard_widget.dart';
-import 'dart:ui';
+import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:percent_indicator/percent_indicator.dart';
-import 'package:provider/provider.dart';
 import 'splash_screen_model.dart';
 export 'splash_screen_model.dart';
 
@@ -34,19 +33,61 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
     super.initState();
     _model = createModel(context, () => SplashScreenModel());
 
-    Future.delayed(const Duration(seconds: 2), () async {
-      if (!mounted) return;
-      final results = await Connectivity().checkConnectivity();
-      final offline = results.every((r) => r == ConnectivityResult.none);
-      final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
-      if (offline && cachedEmail != null) {
-        context.go(ReviewerDashboardWidget.routePath);
-      } else {
-        context.go(LoginWidget.routePath);
-      }
-    });
+    Future.delayed(const Duration(seconds: 2), _routeAfterStartup);
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
+  }
+
+  Future<void> _routeAfterStartup() async {
+    if (!mounted) return;
+
+    final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
+    final sessionEmail = supabase.auth.currentSession?.user.email;
+
+    if (sessionEmail != null) {
+      Hive.box('irb_cache').put('reviewer_email', sessionEmail);
+      if (!mounted) return;
+      context.go(ReviewerDashboardWidget.routePath);
+      return;
+    }
+
+    final offline = await _isDefinitelyOffline();
+    if (cachedEmail != null && (offline || !await _canReachSupabase())) {
+      if (!mounted) return;
+      context.go(ReviewerDashboardWidget.routePath);
+      return;
+    }
+
+    if (!mounted) return;
+    context.go(LoginWidget.routePath);
+  }
+
+  Future<bool> _isDefinitelyOffline() async {
+    try {
+      final results = await Connectivity()
+          .checkConnectivity()
+          .timeout(const Duration(seconds: 2));
+      return results.every((r) => r == ConnectivityResult.none);
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<bool> _canReachSupabase() async {
+    try {
+      await supabase
+          .from('reviewers')
+          .select('id')
+          .limit(1)
+          .timeout(const Duration(seconds: 3));
+      return true;
+    } catch (e) {
+      final message = e.toString();
+      return !(e is TimeoutException ||
+          message.contains('Failed host lookup') ||
+          message.contains('SocketException') ||
+          message.contains('Connection timed out'));
+    }
   }
 
   @override

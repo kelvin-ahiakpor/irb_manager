@@ -65,9 +65,8 @@ class _LoginWidgetState extends State<LoginWidget> {
     }
 
     // If offline and this email was previously authorised, skip the DB check
-    final results = await Connectivity().checkConnectivity();
-    final offline = results.every((r) => r == ConnectivityResult.none);
     final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
+    final offline = await _isDefinitelyOffline();
     if (offline && cachedEmail == email) {
       if (!mounted) return;
       context.go(ReviewerDashboardWidget.routePath);
@@ -84,7 +83,8 @@ class _LoginWidgetState extends State<LoginWidget> {
           .from('reviewers')
           .select('id')
           .eq('email', email)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 8));
 
       if (!mounted) return;
 
@@ -113,6 +113,12 @@ class _LoginWidgetState extends State<LoginWidget> {
     } catch (e) {
       debugPrint('IRB login error: $e');
       if (_isRetryableNetworkError(e)) {
+        if (cachedEmail == email) {
+          if (!mounted) return;
+          context.go(ReviewerDashboardWidget.routePath);
+          return;
+        }
+
         safeSetState(() {
           _model.isLoading = false;
           _model.errorMessage =
@@ -152,7 +158,19 @@ class _LoginWidgetState extends State<LoginWidget> {
     final message = error.toString();
     return message.contains('Failed host lookup') ||
         message.contains('SocketException') ||
-        message.contains('Connection timed out');
+        message.contains('Connection timed out') ||
+        error is TimeoutException;
+  }
+
+  Future<bool> _isDefinitelyOffline() async {
+    try {
+      final results = await Connectivity()
+          .checkConnectivity()
+          .timeout(const Duration(seconds: 2));
+      return results.every((r) => r == ConnectivityResult.none);
+    } catch (_) {
+      return true;
+    }
   }
 
   Future<void> _safeSignOut() async {
