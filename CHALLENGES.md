@@ -217,6 +217,49 @@ Used internally by `supabase_flutter` to persist the PKCE code verifier across t
 
 ---
 
+## 13. Reviewer Dashboard Filters Showing Wrong Cards During Testing
+
+**Phase affected:** Reviewer dashboard / test data
+
+**Symptom:** Tapping a filter button such as `PENDING` could still show cards with other statuses. Early fixes corrected the `IN REVIEW` status comparison and stabilized the Supabase stream, but the test still failed when using demo data.
+
+**Root cause:** The dashboard had two data paths:
+- Live/cache data rendered through the `StreamBuilder` and filter logic.
+- Old hardcoded demo card widgets rendered separately below the stream output.
+
+The hardcoded demo cards bypassed the filter entirely. When the database was empty or Hive only contained a few cached rows, this made it look like filtering was broken even if the dynamic list was filtering correctly.
+
+**Fix:**
+- Converted demo applications into structured `Map<String, dynamic>` rows in `_demoApplications`.
+- Demo rows now flow through the same `_normalizeStatus`, filter, and `_buildApplicationCard` path as Supabase/Hive data.
+- Added `_withDemoCoverage()` so demo rows fill missing statuses during testing while preserving any real or cached rows already present.
+- Disabled the old hardcoded generated demo card block so it no longer renders unfiltered cards.
+- Normalized status variants such as `UNDER REVIEW`, `IN_REVIEW`, and `CONDITIONALLY_APPROVED`.
+
+**Relation to local resources:** Related but not caused by local resources. Hive cache affected which rows appeared during testing, but the actual bug was that mock/demo cards bypassed the filtered data pipeline.
+
+**Status:** FIXED. With an empty or partial database, filters can now be tested against structured demo rows that behave like real application records.
+
+---
+
+## 14. Application Detail Fails for Demo Dashboard Cards
+
+**Phase affected:** Phase 4 - Application Detail
+
+**Symptom:** Tapping some dashboard cards opened the application detail route but showed `PostgrestException(message: invalid input syntax for type uuid: "demo-review-1", code: 22P02)`.
+
+**Root cause:** The filter test fallback rows used local demo IDs such as `demo-review-1`. The detail screen queries `public.applications.id`, which is a UUID column, so Supabase rejected the non-UUID value before it could return a record. A second issue was found in the attachment flow: the database schema and mailbox poller use `attachments.storage_url`, but the detail screen was reading `storage_path`.
+
+**Fix:**
+- Added a defensive dashboard guard so non-UUID fallback demo cards do not navigate into the Supabase-backed detail route.
+- Updated the application detail attachment row builder to read `storage_url`, with `storage_path` kept only as a compatibility fallback.
+- Normalized detail status display so database `UNDER REVIEW` is shown as `IN REVIEW`.
+- Seeded real Phase 4 test records in Supabase for `UNDER REVIEW`, `CONDITIONALLY APPROVED`, `APPROVED`, and `REJECTED`, plus one attachment object/row for the `UNDER REVIEW` test record. These rows use real UUIDs, so Phase 4 detail testing now exercises the production query path instead of local-only demo data.
+
+**Status:** FIXED for Phase 4 testing. Use the seeded Supabase rows when testing application detail and document viewer behavior; fallback demo cards are only for dashboard/filter visual coverage.
+
+---
+
 ## Summary Table
 
 | # | Issue | Phase | Impact |
@@ -230,3 +273,5 @@ Used internally by `supabase_flutter` to persist the PKCE code verifier across t
 | 7 | Gradle cache corruption | Various | Build failure (environment issue) |
 | 8 | Flutter web SPA routing on Vercel | Web deploy | Blank page on direct URL access |
 | 12 | Offline startup/session resume routing | Offline support | Login spinner / unnecessary re-login |
+| 13 | Dashboard filters bypassed by hardcoded demo cards | Reviewer dashboard | Filter tests showed wrong statuses |
+| 14 | Demo dashboard IDs sent to UUID detail query | Application detail | Some cards opened detail errors instead of records |

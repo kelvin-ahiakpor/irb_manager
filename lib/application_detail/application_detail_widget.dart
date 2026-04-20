@@ -48,11 +48,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       return;
     }
     try {
-      final appData = await supabase
-          .from('applications')
-          .select()
-          .eq('id', id)
-          .single();
+      final appData =
+          await supabase.from('applications').select().eq('id', id).single();
       final attData = await supabase
           .from('attachments')
           .select()
@@ -103,7 +100,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       );
     }
     final app = _model.application!;
-    final status = (app['status'] as String?) ?? 'PENDING';
+    final status = _displayStatus(app['status']);
     return Scaffold(
       key: scaffoldKey,
       backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
@@ -496,18 +493,21 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                               ],
                             ),
                             ..._model.attachments.isEmpty
-                              ? [
-                                  Padding(
-                                    padding: EdgeInsetsDirectional.fromSTEB(0.0, 8.0, 0.0, 4.0),
-                                    child: Text(
-                                      'No attachments.',
-                                      style: FlutterFlowTheme.of(context).bodyMedium,
-                                    ),
-                                  )
-                                ]
-                              : _model.attachments
-                                  .map((att) => _buildAttachmentRow(context, att))
-                                  .toList(),
+                                ? [
+                                    Padding(
+                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                          0.0, 8.0, 0.0, 4.0),
+                                      child: Text(
+                                        'No attachments.',
+                                        style: FlutterFlowTheme.of(context)
+                                            .bodyMedium,
+                                      ),
+                                    )
+                                  ]
+                                : _model.attachments
+                                    .map((att) =>
+                                        _buildAttachmentRow(context, att))
+                                    .toList(),
                           ].divide(SizedBox(height: 8.0)),
                         ),
                       ),
@@ -624,63 +624,63 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                           },
                         ),
                         child: Container(
-                        decoration: BoxDecoration(
-                          color: FlutterFlowTheme.of(context).primary,
-                        ),
-                        child: Align(
-                          alignment: AlignmentDirectional(0.0, 0.0),
-                          child: Stack(
+                          decoration: BoxDecoration(
+                            color: FlutterFlowTheme.of(context).primary,
+                          ),
+                          child: Align(
                             alignment: AlignmentDirectional(0.0, 0.0),
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.edit_document,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryBackground,
-                                    size: 16.0,
-                                  ),
-                                  Text(
-                                    'UPDATE STATUS',
-                                    style: FlutterFlowTheme.of(context)
-                                        .labelMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
+                            child: Stack(
+                              alignment: AlignmentDirectional(0.0, 0.0),
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.edit_document,
+                                      color: FlutterFlowTheme.of(context)
+                                          .primaryBackground,
+                                      size: 16.0,
+                                    ),
+                                    Text(
+                                      'UPDATE STATUS',
+                                      style: FlutterFlowTheme.of(context)
+                                          .labelMedium
+                                          .override(
+                                            font: GoogleFonts.inter(
+                                              fontWeight: FontWeight.bold,
+                                              fontStyle:
+                                                  FlutterFlowTheme.of(context)
+                                                      .labelMedium
+                                                      .fontStyle,
+                                            ),
+                                            color: FlutterFlowTheme.of(context)
+                                                .primaryBackground,
+                                            fontSize: 12.0,
+                                            letterSpacing: 0.0,
                                             fontWeight: FontWeight.bold,
                                             fontStyle:
                                                 FlutterFlowTheme.of(context)
                                                     .labelMedium
                                                     .fontStyle,
+                                            lineHeight: 1.3,
                                           ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryBackground,
-                                          fontSize: 12.0,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.bold,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelMedium
-                                                  .fontStyle,
-                                          lineHeight: 1.3,
-                                        ),
-                                  ),
-                                  Container(
-                                    width: 0.0,
-                                    height: 0.0,
-                                  ),
-                                ].divide(SizedBox(width: 8.0)),
-                              ),
-                              Container(
-                                width: 0.0,
-                                height: 0.0,
-                              ),
-                            ],
+                                    ),
+                                    Container(
+                                      width: 0.0,
+                                      height: 0.0,
+                                    ),
+                                  ].divide(SizedBox(width: 8.0)),
+                                ),
+                                Container(
+                                  width: 0.0,
+                                  height: 0.0,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                       ),
                     ),
                     Container(
@@ -771,9 +771,22 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
     );
   }
 
+  String _displayStatus(Object? value) {
+    final status = value.toString().trim().toUpperCase();
+    return switch (status) {
+      'UNDER REVIEW' || 'IN_REVIEW' || 'IN-REVIEW' => 'IN REVIEW',
+      'CONDITIONALLY_APPROVED' ||
+      'CONDITIONALLY-APPROVED' =>
+        'CONDITIONALLY APPROVED',
+      _ => status.isEmpty ? 'PENDING' : status,
+    };
+  }
+
   Widget _buildAttachmentRow(BuildContext context, Map<String, dynamic> att) {
     final fileName = (att['file_name'] as String?) ?? 'Attachment';
-    final storagePath = (att['storage_path'] as String?) ?? '';
+    final storagePath = (att['storage_url'] as String?) ??
+        (att['storage_path'] as String?) ??
+        '';
     final ext = fileName.split('.').last.toLowerCase();
     final icon = ext == 'pdf'
         ? Icons.picture_as_pdf_rounded
@@ -823,9 +836,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                   style: FlutterFlowTheme.of(context).bodyMedium.override(
                         font: GoogleFonts.inter(
                           fontWeight: FontWeight.w600,
-                          fontStyle: FlutterFlowTheme.of(context)
-                              .bodyMedium
-                              .fontStyle,
+                          fontStyle:
+                              FlutterFlowTheme.of(context).bodyMedium.fontStyle,
                         ),
                         color: FlutterFlowTheme.of(context).primaryText,
                         fontSize: 14.0,
