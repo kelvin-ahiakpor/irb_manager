@@ -1,4 +1,3 @@
-import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/gestures.dart';
@@ -21,18 +20,6 @@ void main() async {
   await FlutterFlowTheme.initialize();
   await Hive.initFlutter();
   await Hive.openBox('irb_cache');
-
-  if (!kIsWeb) {
-    // Handle OAuth deep link callbacks (Supabase Azure login redirect).
-    final appLinks = AppLinks();
-    appLinks.uriLinkStream.listen((uri) {
-      supabase.auth.getSessionFromUrl(uri);
-    });
-    final initialUri = await appLinks.getInitialLink();
-    if (initialUri != null) {
-      await supabase.auth.getSessionFromUrl(initialUri);
-    }
-  }
 
   runApp(MyApp());
 }

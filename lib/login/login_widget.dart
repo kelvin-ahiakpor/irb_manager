@@ -4,14 +4,10 @@ import '/index.dart' show ReviewerDashboardWidget;
 import '/components/microsoft_button_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:async';
-import 'dart:ui';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_model.dart';
 export 'login_model.dart';
@@ -37,18 +33,30 @@ class _LoginWidgetState extends State<LoginWidget> {
     super.initState();
     _model = createModel(context, () => LoginModel());
 
-    _authSubscription =
-        supabase.auth.onAuthStateChange.listen(_handleAuthChange);
+    _authSubscription = supabase.auth.onAuthStateChange.listen(
+      _handleAuthChange,
+      onError: _handleAuthError,
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final session = supabase.auth.currentSession;
+      if (session != null) {
+        _handleSignedInSession(session);
+      }
+    });
   }
 
   Future<void> _handleAuthChange(AuthState state) async {
     if (state.event != AuthChangeEvent.signedIn) return;
+    await _handleSignedInSession(state.session);
+  }
 
-    final email = state.session?.user.email;
+  Future<void> _handleSignedInSession(Session? session) async {
+    final email = session?.user.email;
     if (email == null) {
       await supabase.auth.signOut();
-      safeSetState(() =>
-          _model.errorMessage = 'Could not retrieve your account email.');
+      safeSetState(
+          () => _model.errorMessage = 'Could not retrieve your account email.');
       return;
     }
 
@@ -78,6 +86,7 @@ class _LoginWidgetState extends State<LoginWidget> {
         });
       }
     } catch (e) {
+      debugPrint('IRB login error: $e');
       await supabase.auth.signOut();
       safeSetState(() {
         _model.isLoading = false;
@@ -86,13 +95,30 @@ class _LoginWidgetState extends State<LoginWidget> {
     }
   }
 
+  void _handleAuthError(Object error, StackTrace stackTrace) {
+    debugPrint('Supabase auth callback error: $error');
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (supabase.auth.currentSession != null) {
+      return;
+    }
+
+    safeSetState(() {
+      _model.isLoading = false;
+      _model.errorMessage = error is AuthException
+          ? 'Sign-in failed: ${error.message}'
+          : 'Sign-in failed. Please try again.';
+    });
+  }
+
   Future<void> _signInWithMicrosoft() async {
     safeSetState(() => _model.errorMessage = null);
     try {
       await supabase.auth.signInWithOAuth(
         OAuthProvider.azure,
-        redirectTo: 'ashesiirbmanager://ashesiirbmanager.com/login-callback',
+        redirectTo: 'gh.edu.ashesi.irbmanager://login-callback/',
         authScreenLaunchMode: LaunchMode.externalApplication,
+        scopes: 'email profile openid',
       );
     } catch (e) {
       safeSetState(() =>
