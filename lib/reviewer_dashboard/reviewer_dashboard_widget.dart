@@ -273,6 +273,8 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                                 ),
                               ),
                             )),
+                      ],
+                    ),
                   ].divide(SizedBox(height: 0.0)),
                 ),
               ),

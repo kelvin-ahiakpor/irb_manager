@@ -90,7 +90,7 @@ class _LoginWidgetState extends State<LoginWidget> {
       await supabase.auth.signInWithOAuth(
         OAuthProvider.azure,
         redirectTo: 'ashesiirbmanager://ashesiirbmanager.com/login-callback',
-        authScreenLaunchMode: LaunchMode.externalBrowser,
+        authScreenLaunchMode: LaunchMode.externalApplication,
       );
     } catch (e) {
       safeSetState(() =>

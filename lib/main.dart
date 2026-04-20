@@ -25,7 +25,7 @@ void main() async {
     supabase.auth.getSessionFromUrl(uri);
   });
   // App cold-started via deep link.
-  final initialUri = await appLinks.getInitialAppLink();
+  final initialUri = await appLinks.getInitialLink();
   if (initialUri != null) {
     await supabase.auth.getSessionFromUrl(initialUri);
   }
