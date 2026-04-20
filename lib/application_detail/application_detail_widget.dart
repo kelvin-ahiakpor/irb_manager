@@ -125,15 +125,18 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                       ),
                       child: Stack(
                         children: [
-                          Opacity(
-                            opacity: 0.4,
-                            child: CachedNetworkImage(
-                              fadeInDuration: Duration(milliseconds: 0),
-                              fadeOutDuration: Duration(milliseconds: 0),
-                              imageUrl:
-                                  'https://dimg.dreamflow.cloud/v1/image/abstract academic mural with geometric patterns and figures',
-                              height: 140.0,
-                              fit: BoxFit.cover,
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: 0.4,
+                              child: CachedNetworkImage(
+                                fadeInDuration: Duration(milliseconds: 0),
+                                fadeOutDuration: Duration(milliseconds: 0),
+                                imageUrl:
+                                    'https://dimg.dreamflow.cloud/v1/image/abstract academic mural with geometric patterns and figures',
+                                width: double.infinity,
+                                height: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
                           Align(
