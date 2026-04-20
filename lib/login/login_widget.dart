@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -60,6 +61,16 @@ class _LoginWidgetState extends State<LoginWidget> {
       await _safeSignOut();
       safeSetState(
           () => _model.errorMessage = 'Could not retrieve your account email.');
+      return;
+    }
+
+    // If offline and this email was previously authorised, skip the DB check
+    final results = await Connectivity().checkConnectivity();
+    final offline = results.every((r) => r == ConnectivityResult.none);
+    final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
+    if (offline && cachedEmail == email) {
+      if (!mounted) return;
+      context.go(ReviewerDashboardWidget.routePath);
       return;
     }
 
