@@ -260,6 +260,36 @@ The hardcoded demo cards bypassed the filter entirely. When the database was emp
 
 ---
 
+## 15. Phase 5 Status Updates Reached Supabase but Failed or Looked Broken in the App
+
+**Phase affected:** Phase 5 - Status Update
+
+**Symptoms:**
+- Confirming a status update initially failed with `status_history_changed_by_fkey`.
+- Turning notifications on produced `FunctionException(status: 401, ... UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM, Unsupported JWT alg ES256)`.
+- After a successful database update, the detail screen and dashboard could still show the old status until the user navigated around manually.
+- Notification tests showed email rows but no SMS rows for some applications.
+
+**Root causes:**
+- The app was inserting `supabase.auth.currentUser.id` into `status_history.changed_by`, but that foreign key references `public.reviewers.id`, not `auth.users.id`.
+- The `send-notification` Edge Function was deployed with JWT verification enabled, so the mobile app's token was rejected before the function body ran.
+- The application detail screen loaded data once on entry and did not refetch after the update sheet closed. The dashboard also relied too heavily on the live stream/cache path, so newer manual refresh data could be visually overwritten by stale in-memory state.
+- SMS notification rows were only created when `student_phone` existed. Some seeded test applications had email addresses but no phone numbers, so only email rows appeared.
+
+**Fix:**
+- Added reviewer lookup by email and inserted the matching `reviewers.id` into `status_history.changed_by`.
+- Updated status history inserts to use the current schema fields: `old_status` and `new_status`.
+- Passed the current status into the update sheet so the current option is preselected and the sheet reflects the real database value.
+- Refetched the application record after returning from the update sheet, and refreshed/merged dashboard application rows after returning from detail so the latest status shows immediately.
+- Deployed `send-notification` with `--no-verify-jwt` so notification requests from the mobile app can reach the function.
+- Confirmed that SMS testing requires a real `student_phone`; seeded `+233505538564` for the Phase 5 test record so both email and SMS notification rows could be verified.
+
+**Frontend note:** A few small UI adjustments were made during Phase 5/5+ detail testing so status and proposal content fit better on narrow screens, but the main Phase 5 blockers were data flow, auth/configuration, and refresh behavior rather than styling.
+
+**Status:** FIXED. Phase 5 status update testing now passes: status changes persist, `status_history` rows are written with the correct reviewer ID, and email/SMS notification rows are inserted when the corresponding contact fields exist.
+
+---
+
 ## Summary Table
 
 | # | Issue | Phase | Impact |
@@ -275,3 +305,4 @@ The hardcoded demo cards bypassed the filter entirely. When the database was emp
 | 12 | Offline startup/session resume routing | Offline support | Login spinner / unnecessary re-login |
 | 13 | Dashboard filters bypassed by hardcoded demo cards | Reviewer dashboard | Filter tests showed wrong statuses |
 | 14 | Demo dashboard IDs sent to UUID detail query | Application detail | Some cards opened detail errors instead of records |
+| 15 | Status update flow used wrong reviewer key and stale refresh path | Phase 5 | Status save/notification tests failed or looked inconsistent |
