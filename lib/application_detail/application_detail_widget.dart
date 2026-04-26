@@ -158,6 +158,108 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
     }
   }
 
+  String _displayStudentName(Object? value) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return '';
+    final parts = raw.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+    final names = parts.toList();
+    if (names.length <= 2) return raw;
+
+    final first = names.first;
+    final last = names.last;
+    final middleInitials = names
+        .sublist(1, names.length - 1)
+        .map((name) => '${name[0].toUpperCase()}.')
+        .join(' ');
+
+    return '$first $middleInitials $last';
+  }
+
+  Future<void> _deleteApplication() async {
+    final id = widget.applicationId;
+    if (id == null || id.isEmpty) return;
+
+    if (_isOffline || _model.fromCache) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Connect to the internet before deleting this application.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Delete application?'),
+            content: const Text(
+              'This will remove the application record and its related history entries. Use this only if the submission was sent in error.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    try {
+      final storagePaths = _model.attachments
+          .map((att) => ((att['storage_url'] as String?) ??
+                  (att['storage_path'] as String?) ??
+                  '')
+              .trim())
+          .where((path) => path.isNotEmpty)
+          .toList();
+
+      if (storagePaths.isNotEmpty) {
+        try {
+          await supabase.storage.from('attachments').remove(storagePaths);
+        } catch (e) {
+          debugPrint('Attachment storage cleanup failed: $e');
+        }
+      }
+
+      await supabase.from('applications').delete().eq('id', id);
+
+      final box = Hive.box('irb_cache');
+      box.delete('attachments_$id');
+      box.delete('history_$id');
+
+      final appsRaw = box.get('applications') as String?;
+      if (appsRaw != null) {
+        final apps = (jsonDecode(appsRaw) as List).cast<Map<String, dynamic>>();
+        apps.removeWhere((app) => app['id'] == id);
+        box.put('applications', jsonEncode(apps));
+      }
+
+      final queueRaw = box.get('status_update_queue') as String? ?? '[]';
+      final queue = (jsonDecode(queueRaw) as List).cast<Map<String, dynamic>>();
+      queue.removeWhere((item) => item['application_id'] == id);
+      box.put('status_update_queue', jsonEncode(queue));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Application deleted.')),
+      );
+      context.safePop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _connectivitySub.cancel();
@@ -310,8 +412,9 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            (app['student_name'] as String?) ??
-                                                '',
+                                            _displayStudentName(
+                                              app['student_name'],
+                                            ),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: FlutterFlowTheme.of(context)
@@ -1464,6 +1567,14 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
         return SafeArea(
           child: Wrap(
             children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded),
+                title: const Text('Delete application'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await _deleteApplication();
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.close_rounded),
                 title: const Text('Close'),

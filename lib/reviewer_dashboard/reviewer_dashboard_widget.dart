@@ -195,52 +195,14 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
           .select()
           .order('submitted_at', ascending: false);
       final rows = List<Map<String, dynamic>>.from(applications);
-      final merged = _mergeApplications(_latestApplications, rows);
-      _model.cacheApplications(merged);
+      _model.cacheApplications(rows);
       if (mounted) {
-        safeSetState(() => _latestApplications = merged);
+        safeSetState(() => _latestApplications = rows);
       }
-      _cacheRecentApplicationDetails(merged);
+      _cacheRecentApplicationDetails(rows);
     } catch (_) {
       // Keep the current stream/cache data if the manual refresh fails.
     }
-  }
-
-  List<Map<String, dynamic>> _mergeApplications(
-    List<Map<String, dynamic>> current,
-    List<Map<String, dynamic>> incoming,
-  ) {
-    final byId = <String, Map<String, dynamic>>{};
-    for (final app in [...current, ...incoming]) {
-      final id = app['id']?.toString();
-      if (id == null || id.isEmpty) continue;
-      final existing = byId[id];
-      if (existing == null || _isNewerApplication(app, existing)) {
-        byId[id] = app;
-      }
-    }
-    final merged = byId.values.toList();
-    merged.sort((a, b) {
-      final aSubmitted = _parseDate(a['submitted_at']);
-      final bSubmitted = _parseDate(b['submitted_at']);
-      return bSubmitted.compareTo(aSubmitted);
-    });
-    return merged;
-  }
-
-  bool _isNewerApplication(
-    Map<String, dynamic> candidate,
-    Map<String, dynamic> existing,
-  ) {
-    final candidateUpdated = _parseDate(candidate['updated_at']);
-    final existingUpdated = _parseDate(existing['updated_at']);
-    return candidateUpdated.isAfter(existingUpdated) ||
-        candidateUpdated.isAtSameMomentAs(existingUpdated);
-  }
-
-  DateTime _parseDate(Object? value) {
-    return DateTime.tryParse(value?.toString() ?? '') ??
-        DateTime.fromMillisecondsSinceEpoch(0);
   }
 
   // Proactively caches attachment metadata and status history for the 30 most
@@ -250,16 +212,17 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
   Future<void> _cacheRecentApplicationDetails(
       List<Map<String, dynamic>> apps) async {
     final cutoff = DateTime.now().subtract(const Duration(days: 30));
-    final recent = apps.where((a) {
-      final ts = DateTime.tryParse(a['submitted_at']?.toString() ?? '');
-      return ts != null && ts.isAfter(cutoff);
-    }).take(30).toList();
+    final recent = apps
+        .where((a) {
+          final ts = DateTime.tryParse(a['submitted_at']?.toString() ?? '');
+          return ts != null && ts.isAfter(cutoff);
+        })
+        .take(30)
+        .toList();
     if (recent.isEmpty) return;
 
-    final ids = recent
-        .map((a) => a['id']?.toString())
-        .whereType<String>()
-        .toList();
+    final ids =
+        recent.map((a) => a['id']?.toString()).whereType<String>().toList();
     if (ids.isEmpty) return;
 
     final box = Hive.box('irb_cache');
@@ -638,10 +601,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                           // live data event. This keeps the on-device copy
                           // fresh so offline reads are as recent as possible.
                           if (snapshot.hasData) {
-                            _latestApplications = _mergeApplications(
-                              _latestApplications,
-                              snapshot.data!,
-                            );
+                            _latestApplications = snapshot.data!;
                             _model.cacheApplications(_latestApplications);
                           }
 

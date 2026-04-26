@@ -79,7 +79,8 @@ async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
   // $search scopes to IRB submissions so random inbox mail is never processed
   const params = new URLSearchParams({
     '$search':  `"${IRB_SUBJECT_PREFIX}"`,
-    '$select':  'id,subject,body,bodyPreview,from,receivedDateTime,hasAttachments',
+    '$filter':  'isRead eq false',
+    '$select':  'id,subject,body,bodyPreview,from,receivedDateTime,hasAttachments,isRead',
     '$top':     '20',
   })
   const res  = await fetch(
@@ -96,7 +97,7 @@ async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
   }
   // Secondary guard: skip anything already read or without the prefix
   return data.value.filter((m: GraphMessage) =>
-    m.subject?.includes(IRB_SUBJECT_PREFIX)
+    !m.isRead && m.subject?.includes(IRB_SUBJECT_PREFIX)
   )
 }
 
@@ -105,8 +106,24 @@ async function fetchAttachments(token: string, messageId: string): Promise<Graph
     `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,size`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  const data = await res.json()
-  return (data.value ?? []).filter((a: GraphAttachment) => a.contentBytes)
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error(`Graph attachments API ${res.status}: ${text}`)
+  }
+  const data = JSON.parse(text)
+  if (!Array.isArray(data.value)) {
+    throw new Error(`Unexpected Graph attachments response: ${text}`)
+  }
+  const all = data.value as GraphAttachment[]
+  console.log(`mailbox-poller attachments [${messageId}]: graph returned ${all.length}`)
+  for (const att of all) {
+    console.log(
+      `mailbox-poller attachments [${messageId}]: name="${att.name}" type="${att.contentType}" size=${att.size ?? 'unknown'} hasContentBytes=${Boolean(att.contentBytes)}`
+    )
+  }
+  const supported = all.filter((a: GraphAttachment) => a.contentBytes)
+  console.log(`mailbox-poller attachments [${messageId}]: usable contentBytes attachments ${supported.length}`)
+  return supported
 }
 
 async function markAsRead(token: string, messageId: string): Promise<void> {
@@ -163,12 +180,18 @@ async function processEmail(
   try {
     const senderEmail = email.from.emailAddress.address
     const senderName  = normaliseName(email.from.emailAddress.name || senderEmail)
+    const bodyText  = email.body.contentType === 'html'
+      ? stripHtml(email.body.content)
+      : email.body.content
+
+    const studentId     = extractStudentId(email.subject, bodyText)
+    const researchTitle = extractResearchTitle(email.subject)
 
     const { data: existing } = await supabase
       .from('applications')
       .select('id')
       .eq('student_email', senderEmail)
-      .eq('subject', email.subject)
+      .eq('subject', researchTitle)
       .eq('submission_method', 'email')
       .maybeSingle()
 
@@ -176,13 +199,6 @@ async function processEmail(
       await markAsRead(token, messageId)
       return { messageId, status: 'skipped', detail: 'duplicate' }
     }
-
-    const bodyText  = email.body.contentType === 'html'
-      ? stripHtml(email.body.content)
-      : email.body.content
-
-    const studentId     = extractStudentId(email.subject, bodyText)
-    const researchTitle = extractResearchTitle(email.subject)
 
     const { data: app, error: appErr } = await supabase
       .from('applications')
@@ -209,8 +225,11 @@ async function processEmail(
       note:           'Application received via email',
     })
 
+    console.log(`mailbox-poller [${messageId}]: hasAttachments=${Boolean(email.hasAttachments)}`)
+
     if (email.hasAttachments) {
       const attachments = await fetchAttachments(token, messageId)
+      console.log(`mailbox-poller [${messageId}]: processing ${attachments.length} fetched attachment(s)`)
 
       for (const att of attachments) {
         const binary      = atob(att.contentBytes)
@@ -218,6 +237,7 @@ async function processEmail(
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
 
         const storagePath = `${app.id}/${Date.now()}_${att.name}`
+        console.log(`mailbox-poller [${messageId}]: uploading "${att.name}" to storage path "${storagePath}"`)
 
         const { error: uploadErr } = await supabase.storage
           .from('attachments')
@@ -228,13 +248,23 @@ async function processEmail(
           continue
         }
 
-        await supabase.from('attachments').insert({
+        console.log(`mailbox-poller [${messageId}]: upload succeeded for "${att.name}"`)
+
+        const { error: attachmentInsertErr } = await supabase.from('attachments').insert({
           application_id: app.id,
           file_name:      att.name,
           file_type:      att.contentType,
           storage_url:    storagePath,
         })
+        if (attachmentInsertErr) {
+          console.error(`Attachment row insert failed (${att.name}):`, attachmentInsertErr.message)
+          continue
+        }
+
+        console.log(`mailbox-poller [${messageId}]: attachment row inserted for "${att.name}"`)
       }
+    } else {
+      console.log(`mailbox-poller [${messageId}]: email reported no attachments`)
     }
 
     await markAsRead(token, messageId)
