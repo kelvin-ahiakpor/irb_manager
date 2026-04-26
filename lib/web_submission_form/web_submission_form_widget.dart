@@ -6,6 +6,8 @@ import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'file_picker_stub.dart'
+    if (dart.library.html) 'file_picker_web.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'web_submission_form_model.dart';
@@ -42,15 +44,9 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
     super.dispose();
   }
 
-  Future<void> _pickFiles() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'docx'],
-    );
-    if (result == null) return;
-    safeSetState(() {
-      _model.selectedFiles.addAll(result.files);
+  void _pickFiles() {
+    showFilePicker((files) {
+      if (mounted) safeSetState(() => _model.selectedFiles.addAll(files));
     });
   }
 
@@ -64,6 +60,14 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Please fill in Student ID, Email, and Research Title.'),
         backgroundColor: const Color(0xFFC0392B),
+      ));
+      return;
+    }
+
+    if (_model.selectedFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please attach at least one document before submitting.'),
+        backgroundColor: Color(0xFFC0392B),
       ));
       return;
     }
@@ -1144,8 +1148,9 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.center,
                                     children: [
-                                      GestureDetector(
+                                      InkWell(
                                         onTap: _pickFiles,
+                                        borderRadius: BorderRadius.circular(0.0),
                                         child: Container(
                                           decoration: BoxDecoration(
                                             color: Color(0xFFFDFCF8),

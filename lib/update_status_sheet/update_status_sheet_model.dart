@@ -13,6 +13,7 @@ class UpdateStatusSheetModel extends FlutterFlowModel<UpdateStatusSheetWidget> {
 
   String? selectedStatus;
   bool isSubmitting = false;
+  late TextEditingController reviewerNoteController;
 
   // Model for std_switch component.
   late StdSwitchModel stdSwitchModel;
@@ -20,10 +21,12 @@ class UpdateStatusSheetModel extends FlutterFlowModel<UpdateStatusSheetWidget> {
   @override
   void initState(BuildContext context) {
     stdSwitchModel = createModel(context, () => StdSwitchModel());
+    reviewerNoteController = TextEditingController();
   }
 
   @override
   void dispose() {
     stdSwitchModel.dispose();
+    reviewerNoteController.dispose();
   }
 }

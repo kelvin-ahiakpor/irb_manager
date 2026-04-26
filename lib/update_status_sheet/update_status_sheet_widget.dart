@@ -2,8 +2,12 @@ import '/backend/supabase.dart';
 import '/components/std_switch_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'update_status_sheet_model.dart';
 export 'update_status_sheet_model.dart';
 
@@ -27,6 +31,8 @@ class UpdateStatusSheetWidget extends StatefulWidget {
 
 class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
   late UpdateStatusSheetModel _model;
+  late StreamSubscription<List<ConnectivityResult>> _connectivitySub;
+  bool _isOffline = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -35,6 +41,13 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
     super.initState();
     _model = createModel(context, () => UpdateStatusSheetModel());
     _model.selectedStatus = _normalizeStatus(widget.currentStatus);
+
+    Connectivity().checkConnectivity().then((results) {
+      if (mounted) safeSetState(() => _isOffline = results.every((r) => r == ConnectivityResult.none));
+    });
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      if (mounted) safeSetState(() => _isOffline = results.every((r) => r == ConnectivityResult.none));
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
   }
@@ -65,6 +78,7 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
 
   @override
   void dispose() {
+    _connectivitySub.cancel();
     _model.dispose();
 
     super.dispose();
@@ -682,44 +696,25 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                         BorderRadius.circular(
                                                             0.0),
                                                   ),
-                                                  child: Container(
-                                                    child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  8.0,
-                                                                  8.0,
-                                                                  8.0,
-                                                                  8.0),
-                                                      child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.max,
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .start,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          Container(
-                                                            width: 0.0,
-                                                            height: 0.0,
+                                                  child: TextField(
+                                                    controller: _model.reviewerNoteController,
+                                                    maxLines: 4,
+                                                    minLines: 3,
+                                                    decoration: InputDecoration(
+                                                      hintText: 'Add a note for the applicant (optional)...',
+                                                      hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
+                                                            font: GoogleFonts.inter(),
+                                                            color: FlutterFlowTheme.of(context).secondaryText,
+                                                            letterSpacing: 0.0,
                                                           ),
-                                                          Expanded(
-                                                            flex: 1,
-                                                            child: Container(
-                                                              width: 0.0,
-                                                              height: 0.0,
-                                                            ),
-                                                          ),
-                                                          Container(
-                                                            width: 0.0,
-                                                            height: 0.0,
-                                                          ),
-                                                        ].divide(SizedBox(
-                                                            width: 8.0)),
-                                                      ),
+                                                      border: InputBorder.none,
+                                                      contentPadding: const EdgeInsets.all(8.0),
                                                     ),
+                                                    style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                          font: GoogleFonts.inter(),
+                                                          color: FlutterFlowTheme.of(context).primaryText,
+                                                          letterSpacing: 0.0,
+                                                        ),
                                                   ),
                                                 ),
                                                 Container(
@@ -1017,6 +1012,37 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
+                                          if (_isOffline)
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.symmetric(
+                                                  vertical: 8.0, horizontal: 12.0),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFEF3C7),
+                                                border: Border.all(
+                                                    color: const Color(0xFFF59E0B),
+                                                    width: 1.5),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.wifi_off_rounded,
+                                                      size: 14,
+                                                      color: Color(0xFF92400E)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      'You\'re offline. This update will be queued and applied automatically when your connection returns.',
+                                                      style: FlutterFlowTheme.of(context).bodySmall.override(
+                                                            font: GoogleFonts.inter(),
+                                                            color: const Color(0xFF92400E),
+                                                            letterSpacing: 0.0,
+                                                            lineHeight: 1.4,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                           GestureDetector(
                                             onTap: _model.isSubmitting ||
                                                     _model.selectedStatus ==
@@ -1055,15 +1081,15 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                           .update({
                                                         'status': newStatus
                                                       }).eq('id', id);
+                                                      final note = _model.reviewerNoteController.text.trim();
                                                       await supabase
-                                                          .from(
-                                                              'status_history')
+                                                          .from('status_history')
                                                           .insert({
                                                         'application_id': id,
-                                                        'changed_by':
-                                                            reviewerId,
+                                                        'changed_by': reviewerId,
                                                         'old_status': oldStatus,
                                                         'new_status': newStatus,
+                                                        if (note.isNotEmpty) 'note': note,
                                                       });
                                                       Object? notificationError;
                                                       // Send notification if the notify switch is on.
@@ -1078,14 +1104,10 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                               .invoke(
                                                             'send-notification',
                                                             body: {
-                                                              'application_id':
-                                                                  id,
-                                                              'channels': [
-                                                                'email',
-                                                                'sms'
-                                                              ],
-                                                              'status':
-                                                                  newStatus,
+                                                              'application_id': id,
+                                                              'channels': ['email', 'sms'],
+                                                              'status': newStatus,
+                                                              'reviewer_note': _model.reviewerNoteController.text.trim(),
                                                             },
                                                           );
                                                         } catch (e) {
@@ -1113,19 +1135,41 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                     } catch (e) {
                                                       debugPrint(
                                                           'Status update failed: $e');
-                                                      safeSetState(() =>
-                                                          _model.isSubmitting =
-                                                              false);
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                          SnackBar(
-                                                            content: Text(
-                                                              'Status update failed: $e',
+                                                      final msg = e.toString();
+                                                      final isOffline = msg.contains('SocketException') ||
+                                                          msg.contains('Failed host lookup') ||
+                                                          msg.contains('ClientException') ||
+                                                          msg.contains('Network is unreachable');
+                                                      if (isOffline && newStatus != null) {
+                                                        // Queue the update locally — the dashboard
+                                                        // will flush it to Supabase on reconnect.
+                                                        final box = Hive.box('irb_cache');
+                                                        final raw = box.get('status_update_queue') as String? ?? '[]';
+                                                        final queue = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+                                                        queue.add({
+                                                          'application_id': id,
+                                                          'status': newStatus,
+                                                          'queued_at': DateTime.now().toIso8601String(),
+                                                        });
+                                                        box.put('status_update_queue', jsonEncode(queue));
+                                                        if (context.mounted) {
+                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                            const SnackBar(
+                                                              content: Text('Saved offline — will sync when reconnected.'),
+                                                              backgroundColor: Color(0xFFF59E0B),
                                                             ),
-                                                          ),
-                                                        );
+                                                          );
+                                                          context.safePop();
+                                                        }
+                                                      } else {
+                                                        safeSetState(() => _model.isSubmitting = false);
+                                                        if (context.mounted) {
+                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text('Status update failed: $e'),
+                                                            ),
+                                                          );
+                                                        }
                                                       }
                                                     }
                                                   },

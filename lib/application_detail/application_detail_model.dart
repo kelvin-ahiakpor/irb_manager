@@ -17,6 +17,7 @@ class ApplicationDetailModel extends FlutterFlowModel<ApplicationDetailWidget> {
   Map<String, dynamic>? application;
   List<Map<String, dynamic>> attachments = [];
   bool isLoading = true;
+  bool fromCache = false;
   String? errorMessage;
 
   // Model for info_tile component.

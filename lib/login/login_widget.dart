@@ -89,7 +89,17 @@ class _LoginWidgetState extends State<LoginWidget> {
       if (!mounted) return;
 
       if (row != null) {
+        // LOCAL RESOURCE: Hive — persist the reviewer's email on device.
+        // The splash screen reads this on next launch to skip the login screen
+        // when there's no internet. Without it, a reviewer who opens the app
+        // offline would hit a dead end at the login form.
         Hive.box('irb_cache').put('reviewer_email', email);
+
+        // LOCAL RESOURCE: Firebase Messaging — get this device's FCM token.
+        // The token is unique to this app install on this device. We save it
+        // to the reviewers table so the Edge Function knows where to send push
+        // notifications when a new application comes in. Skipped on web since
+        // FCM push isn't supported there.
         if (!kIsWeb) {
           try {
             final token = await FirebaseMessaging.instance.getToken();

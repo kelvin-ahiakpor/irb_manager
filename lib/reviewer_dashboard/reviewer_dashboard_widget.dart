@@ -99,20 +99,28 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
     _applicationsStream = supabase
         .from('applications')
         .stream(primaryKey: ['id']).order('submitted_at', ascending: false);
-
-    // Check initial connectivity
+    // Check initial connectivity//
+    // LOCAL RESOURCE: connectivity_plus — snapshot the current network state
+    // so the UI knows whether to show the offline banner on first render.
     Connectivity().checkConnectivity().then((results) {
       final offline = results.every((r) => r == ConnectivityResult.none);
       if (mounted) safeSetState(() => _model.isOffline = offline);
     });
 
-    // Listen for connectivity changes
+    // Listen for connectivity changes//
+    // LOCAL RESOURCE: connectivity_plus — stream that fires whenever the
+    // network state changes. Two things happen here: the offline banner
+    // toggles, and when we come back online we flush the Hive action queue
+    // (any status updates the reviewer made while offline).
     _connectivitySub =
         Connectivity().onConnectivityChanged.listen((results) async {
       final offline = results.every((r) => r == ConnectivityResult.none);
       if (mounted) safeSetState(() => _model.isOffline = offline);
 
-      // Back online — flush queued status updates
+      // Back online — flush queued status updates//
+      // LOCAL RESOURCE: Hive — drain the offline queue on reconnect.
+      // Each item is a status update that was saved locally while the device
+      // had no network. We write them to Supabase now and then wipe the queue.
       if (!offline) {
         final queue = _model.loadQueue();
         if (queue.isNotEmpty) {
@@ -539,7 +547,10 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                       StreamBuilder<List<Map<String, dynamic>>>(
                         stream: _applicationsStream,
                         builder: (context, snapshot) {
-                          // Write to cache whenever live data arrives
+                          // Write to cache whenever live data arrives//
+                          // LOCAL RESOURCE: Hive — write to cache on every
+                          // live data event. This keeps the on-device copy
+                          // fresh so offline reads are as recent as possible.
                           if (snapshot.hasData) {
                             _latestApplications = _mergeApplications(
                               _latestApplications,
@@ -548,7 +559,10 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                             _model.cacheApplications(_latestApplications);
                           }
 
-                          // Resolve data: live → cache → empty
+                          // Resolve data: live → cache → empty//
+                          // LOCAL RESOURCE: Hive — read from cache when the
+                          // stream has no data yet (cold start offline). The
+                          // priority order is: live data > Hive cache > empty.
                           final List<Map<String, dynamic>> source;
                           if (_latestApplications.isNotEmpty) {
                             source = _latestApplications;

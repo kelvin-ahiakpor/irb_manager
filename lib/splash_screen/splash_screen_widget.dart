@@ -41,6 +41,11 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
   Future<void> _routeAfterStartup() async {
     if (!mounted) return;
 
+    // LOCAL RESOURCE: Hive — check if a reviewer has previously signed in.
+    // If Supabase still has an active session we trust that and update the
+    // cached email while we're at it. The cached email is the fallback for
+    // when there's no session and no network — it lets the reviewer skip login
+    // and go straight to the cached dashboard.
     final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
     final sessionEmail = supabase.auth.currentSession?.user.email;
 
@@ -51,6 +56,10 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
       return;
     }
 
+    // LOCAL RESOURCE: connectivity_plus — check network state before deciding
+    // whether to show login. If the device is offline and we have a cached
+    // email, we skip login entirely. Forcing login when offline would be a dead
+    // end because Supabase auth needs the network.
     final offline = await _isDefinitelyOffline();
     if (cachedEmail != null && (offline || !await _canReachSupabase())) {
       if (!mounted) return;
@@ -62,6 +71,9 @@ class _SplashScreenWidgetState extends State<SplashScreenWidget> {
     context.go(LoginWidget.routePath);
   }
 
+  // LOCAL RESOURCE: connectivity_plus — reads the OS-level network interfaces.
+  // Returns true only when every interface reports no connection, so a device
+  // on WiFi with no actual internet still passes through to _canReachSupabase.
   Future<bool> _isDefinitelyOffline() async {
     try {
       final results = await Connectivity()

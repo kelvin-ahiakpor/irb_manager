@@ -4,10 +4,14 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'application_detail_model.dart';
 export 'application_detail_model.dart';
 
@@ -26,6 +30,7 @@ class ApplicationDetailWidget extends StatefulWidget {
 
 class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
   late ApplicationDetailModel _model;
+  late StreamSubscription<List<ConnectivityResult>> _connectivitySub;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -35,6 +40,16 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
     _model = createModel(context, () => ApplicationDetailModel());
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadApplication());
+
+    // When the device reconnects after showing cached data, reload from
+    // Supabase so the banner clears and the reviewer sees fresh data.
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      final online = results.any((r) => r != ConnectivityResult.none);
+      if (online && _model.fromCache && mounted) {
+        _model.fromCache = false;
+        _loadApplication();
+      }
+    });
   }
 
   Future<void> _loadApplication() async {
@@ -61,17 +76,55 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       });
     } catch (e) {
       final msg = e.toString();
+      final isNotFound = msg.contains('PGRST116') || msg.contains('0 rows');
+
+      if (!isNotFound) {
+        // Network error — try Hive cache
+        final cached = _loadFromCache(widget.applicationId!);
+        if (cached != null) {
+          safeSetState(() {
+            _model.application = cached;
+            _model.isLoading = false;
+            _model.fromCache = true;
+          });
+          return;
+        }
+      }
+
+      final isOffline = msg.contains('SocketException') ||
+          msg.contains('Failed host lookup') ||
+          msg.contains('ClientException');
       safeSetState(() {
         _model.isLoading = false;
-        _model.errorMessage = msg.contains('PGRST116') || msg.contains('0 rows')
-            ? 'not_found'
-            : msg;
+        _model.errorMessage =
+            isNotFound ? 'not_found' : (isOffline ? 'offline' : msg);
       });
+    }
+  }
+
+  // LOCAL RESOURCE: Hive — look up a single application from the cached list.
+  // The dashboard already writes the full list to Hive every time it gets live
+  // data, so we piggyback on that instead of maintaining a separate per-detail
+  // cache. If the reviewer taps a card while offline, we scan the list for a
+  // matching ID. If we find it, the detail screen loads normally with a banner
+  // saying the data is from cache. If we don't find it (e.g. the app was never
+  // opened online), we fall through to the "you're offline" error screen.
+  Map<String, dynamic>? _loadFromCache(String id) {
+    try {
+      final box = Hive.box('irb_cache');
+      final raw = box.get('applications') as String?;
+      if (raw == null) return null;
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      final match = list.firstWhere((a) => a['id'] == id, orElse: () => {});
+      return match.isEmpty ? null : match;
+    } catch (_) {
+      return null;
     }
   }
 
   @override
   void dispose() {
+    _connectivitySub.cancel();
     _model.dispose();
 
     super.dispose();
@@ -91,7 +144,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       );
     }
     if (_model.errorMessage != null || _model.application == null) {
-      final isNotFound = _model.errorMessage == 'not_found' || _model.application == null;
+      final isNotFound = _model.errorMessage == 'not_found';
+      final isOffline = _model.errorMessage == 'offline';
       return Scaffold(
         backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
         body: Center(
@@ -101,21 +155,31 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  isNotFound ? Icons.search_off_rounded : Icons.error_outline_rounded,
+                  isOffline
+                      ? Icons.wifi_off_rounded
+                      : isNotFound
+                          ? Icons.search_off_rounded
+                          : Icons.error_outline_rounded,
                   size: 56,
                   color: FlutterFlowTheme.of(context).secondaryText,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isNotFound ? 'Application Not Found' : 'Something went wrong',
+                  isOffline
+                      ? 'You\'re Offline'
+                      : isNotFound
+                          ? 'Application Not Found'
+                          : 'Something went wrong',
                   style: FlutterFlowTheme.of(context).titleMedium,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  isNotFound
-                      ? 'This application may have been deleted or is no longer available.'
-                      : (_model.errorMessage ?? ''),
+                  isOffline
+                      ? 'Connect to the internet to view application details.'
+                      : isNotFound
+                          ? 'This application may have been deleted or is no longer available.'
+                          : (_model.errorMessage ?? ''),
                   style: FlutterFlowTheme.of(context).bodySmall.override(
                         font: GoogleFonts.inter(),
                         color: FlutterFlowTheme.of(context).secondaryText,
@@ -158,7 +222,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
           children: [
             Container(
               child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 120.0),
+                padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, _model.fromCache ? 148.0 : 120.0),
                 child: SingleChildScrollView(
                   primary: false,
                   child: Column(
@@ -696,6 +760,33 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                 ),
               ),
             ),
+            if (_model.fromCache)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 110.0,
+                child: Container(
+                  color: const Color(0xFFF59E0B),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 6.0, horizontal: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.wifi_off_rounded,
+                          size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Offline — showing cached data',
+                        style: FlutterFlowTheme.of(context).bodySmall.override(
+                              font: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                              color: Colors.white,
+                              letterSpacing: 0.0,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Align(
               alignment: AlignmentDirectional(0.0, 1.0),
               child: Container(
@@ -809,9 +900,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                             color: FlutterFlowTheme.of(context).primary,
                             size: 28.0,
                           ),
-                          onPressed: () {
-                            print('IconButton pressed ...');
-                          },
+                          onPressed: () => _showHistory(context),
                         ),
                       ),
                     ].divide(SizedBox(width: 16.0)),
@@ -822,6 +911,184 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showHistory(BuildContext context) async {
+    final id = widget.applicationId;
+    if (id == null) return;
+
+    List<Map<String, dynamic>> history = [];
+    try {
+      final rows = await supabase
+          .from('status_history')
+          .select('old_status, new_status, note, changed_at, reviewers(email)')
+          .eq('application_id', id)
+          .order('changed_at', ascending: false);
+      history = List<Map<String, dynamic>>.from(rows);
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.5,
+        maxChildSize: 0.85,
+        minChildSize: 0.3,
+        builder: (_, controller) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: FlutterFlowTheme.of(context).divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded,
+                      color: FlutterFlowTheme.of(context).primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text('STATUS HISTORY',
+                      style: FlutterFlowTheme.of(context).labelLarge.override(
+                            font: GoogleFonts.inter(fontWeight: FontWeight.w800),
+                            letterSpacing: 0.0,
+                          )),
+                ],
+              ),
+            ),
+            Divider(color: FlutterFlowTheme.of(context).divider, height: 1),
+            Expanded(
+              child: history.isEmpty
+                  ? Center(
+                      child: Text('No status changes yet.',
+                          style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                font: GoogleFonts.inter(),
+                                color: FlutterFlowTheme.of(context).secondaryText,
+                                letterSpacing: 0.0,
+                              )))
+                  : ListView.separated(
+                      controller: controller,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: history.length,
+                      separatorBuilder: (_, __) => Divider(
+                          color: FlutterFlowTheme.of(context).divider,
+                          height: 24),
+                      itemBuilder: (_, i) {
+                        final h = history[i];
+                        final oldS = h['old_status'] as String? ?? '—';
+                        final newS = h['new_status'] as String? ?? '—';
+                        final note = h['note'] as String?;
+                        final changedAt = h['changed_at'] as String?;
+                        final reviewer = (h['reviewers'] as Map?)?['email'] as String?;
+                        final dt = changedAt != null
+                            ? DateTime.tryParse(changedAt)?.toLocal()
+                            : null;
+                        final dateStr = dt != null
+                            ? '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                            : '—';
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                _statusChip(context, oldS),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 8),
+                                  child: Icon(Icons.arrow_forward_rounded,
+                                      size: 14),
+                                ),
+                                _statusChip(context, newS),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(dateStr,
+                                style: FlutterFlowTheme.of(context)
+                                    .bodySmall
+                                    .override(
+                                      font: GoogleFonts.inter(),
+                                      color: FlutterFlowTheme.of(context)
+                                          .secondaryText,
+                                      letterSpacing: 0.0,
+                                    )),
+                            if (reviewer != null)
+                              Text('by $reviewer',
+                                  style: FlutterFlowTheme.of(context)
+                                      .bodySmall
+                                      .override(
+                                        font: GoogleFonts.inter(),
+                                        color: FlutterFlowTheme.of(context)
+                                            .secondaryText,
+                                        letterSpacing: 0.0,
+                                      )),
+                            if (note != null && note.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: FlutterFlowTheme.of(context)
+                                      .secondaryBackground,
+                                  border: Border.all(
+                                      color:
+                                          FlutterFlowTheme.of(context).divider),
+                                ),
+                                child: Text(note,
+                                    style: FlutterFlowTheme.of(context)
+                                        .bodySmall
+                                        .override(
+                                          font: GoogleFonts.inter(),
+                                          color: FlutterFlowTheme.of(context)
+                                              .primaryText,
+                                          letterSpacing: 0.0,
+                                          lineHeight: 1.5,
+                                        )),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(BuildContext context, String status) {
+    final color = switch (status.toUpperCase()) {
+      'PENDING' => const Color(0xFFF59E0B),
+      'IN REVIEW' || 'UNDER REVIEW' => FlutterFlowTheme.of(context).primary,
+      'CONDITIONALLY APPROVED' => const Color(0xFF8B5CF6),
+      'APPROVED' => const Color(0xFF10B981),
+      'REJECTED' => FlutterFlowTheme.of(context).error,
+      _ => FlutterFlowTheme.of(context).secondaryText,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        border: Border.all(color: color.withOpacity(0.4)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(status,
+          style: FlutterFlowTheme.of(context).bodySmall.override(
+                font: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                color: color,
+                fontSize: 10,
+                letterSpacing: 0.5,
+              )),
     );
   }
 

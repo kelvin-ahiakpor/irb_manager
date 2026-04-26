@@ -20,9 +20,20 @@ void main() async {
 
   await SupabaseConfig.initialize();
   await FlutterFlowTheme.initialize();
+
+  // LOCAL RESOURCE: Hive (offline key-value store)
+  // We open a single box called 'irb_cache' that the rest of the app reads
+  // and writes to. It holds three things: the applications list, the offline
+  // status-update queue, and the reviewer's email for bypassing login when
+  // there's no network. Has to be opened here before any widget mounts,
+  // otherwise Hive.box() calls elsewhere would throw.
   await Hive.initFlutter();
   await Hive.openBox('irb_cache');
 
+  // LOCAL RESOURCE: Firebase Messaging (device push notification system)
+  // FCM only runs on Android and iOS — the web build has no push support.
+  // We request permission up front so the system dialog appears on first
+  // launch rather than later when the user might not expect it.
   if (!kIsWeb) {
     await Firebase.initializeApp();
     await FirebaseMessaging.instance

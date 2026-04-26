@@ -21,6 +21,13 @@ class ReviewerDashboardModel extends FlutterFlowModel<ReviewerDashboardWidget> {
   bool isOffline = false;
 
   // ── Cache helpers ─────────────────────────────────────────────────────────
+  //
+  // LOCAL RESOURCE: Hive (key 'applications')
+  // The full applications list is JSON-encoded and stored on device every time
+  // a live Supabase fetch succeeds. When the device is offline, the dashboard
+  // and the detail screen both read from here instead of hitting the network.
+  // The application detail screen also uses this same key to look up individual
+  // applications by ID without needing its own separate cache.
 
   static const _cacheKey = 'applications';
 
@@ -40,6 +47,14 @@ class ReviewerDashboardModel extends FlutterFlowModel<ReviewerDashboardWidget> {
   }
 
   // ── Offline action queue ──────────────────────────────────────────────────
+  //
+  // LOCAL RESOURCE: Hive (key 'status_update_queue')
+  // When a reviewer changes an application status while offline, we can't
+  // write to Supabase immediately. Instead we push the update onto a local
+  // queue stored in Hive. The dashboard's connectivity listener picks this up
+  // the moment the device reconnects and flushes everything to Supabase in
+  // order. This means the reviewer never loses a decision just because they
+  // were on a slow or missing connection.
 
   static const _queueKey = 'status_update_queue';
 
