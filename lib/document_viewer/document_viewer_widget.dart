@@ -61,8 +61,7 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
 
     // Check the persistent cache first — the detail screen pre-downloads PDFs
     // when online so they're available here without a network request.
-    final safeName =
-        _safeFileName(widget.fileName ?? path.split('/').last);
+    final safeName = _safeFileName(widget.fileName ?? path.split('/').last);
     final docDir = await getApplicationDocumentsDirectory();
     final persistentFile = File('${docDir.path}/irb_att_$safeName');
     if (await persistentFile.exists()) {
@@ -90,6 +89,25 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
         _viewerError = 'Could not load document: $e';
         _loadingDocument = false;
       });
+    }
+  }
+
+  Future<void> _openInBrowser() async {
+    final path = widget.storagePath;
+    if (path == null || path.isEmpty) return;
+
+    try {
+      final url = _signedUrl ??
+          await supabase.storage
+              .from('attachments')
+              .createSignedUrl(path, 3600);
+      _signedUrl = url;
+      await launchUrl(Uri.parse(url));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open document in browser: $e')),
+      );
     }
   }
 
@@ -282,9 +300,7 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
                                   .primaryBackground,
                               size: 24.0,
                             ),
-                            onPressed: _loadingDocument || _signedUrl == null
-                                ? null
-                                : () => launchUrl(Uri.parse(_signedUrl!)),
+                            onPressed: _loadingDocument ? null : _openInBrowser,
                           ),
                         ],
                       ),

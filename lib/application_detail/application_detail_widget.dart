@@ -42,6 +42,9 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadApplication());
 
+    // LOCAL RESOURCE: connectivity_plus — snapshot current network state so
+    // the detail screen knows whether to label itself offline before the first
+    // live fetch or cache fallback completes.
     Connectivity().checkConnectivity().then((results) {
       if (mounted) {
         safeSetState(() =>
@@ -49,8 +52,9 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       }
     });
 
-    // When the device reconnects after showing cached data, reload from
-    // Supabase so the banner clears and the reviewer sees fresh data.
+    // LOCAL RESOURCE: connectivity_plus — listen for reconnection after a
+    // cached/offline detail view. When the device comes back online, reload
+    // the application from Supabase so the offline banner clears automatically.
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       final online = results.any((r) => r != ConnectivityResult.none);
       if (mounted) safeSetState(() => _isOffline = !online);

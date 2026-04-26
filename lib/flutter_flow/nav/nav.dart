@@ -98,6 +98,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => StatusHistoryWidget(),
         ),
         FFRoute(
+          name: SettingsWidget.routeName,
+          path: SettingsWidget.routePath,
+          builder: (context, params) => SettingsWidget(),
+        ),
+        FFRoute(
           name: WebSubmissionFormWidget.routeName,
           path: WebSubmissionFormWidget.routePath,
           builder: (context, params) => WebSubmissionFormWidget(),

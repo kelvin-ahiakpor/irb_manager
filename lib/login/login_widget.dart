@@ -64,7 +64,9 @@ class _LoginWidgetState extends State<LoginWidget> {
       return;
     }
 
-    // If offline and this email was previously authorised, skip the DB check
+    // LOCAL RESOURCE: connectivity_plus — if the device is offline but this
+    // reviewer has already signed in on the device before, bypass the live
+    // reviewer lookup and continue with the cached identity instead.
     final cachedEmail = Hive.box('irb_cache').get('reviewer_email') as String?;
     final offline = await _isDefinitelyOffline();
     if (offline && cachedEmail == email) {
@@ -172,6 +174,9 @@ class _LoginWidgetState extends State<LoginWidget> {
         error is TimeoutException;
   }
 
+  // LOCAL RESOURCE: connectivity_plus — reads the OS-reported network
+  // interfaces to distinguish a truly offline device from a temporary backend
+  // failure. This protects the reviewer flow from hanging on a dead login path.
   Future<bool> _isDefinitelyOffline() async {
     try {
       final results = await Connectivity()

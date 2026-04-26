@@ -42,11 +42,23 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
     _model = createModel(context, () => UpdateStatusSheetModel());
     _model.selectedStatus = _normalizeStatus(widget.currentStatus);
 
+    // LOCAL RESOURCE: connectivity_plus — check whether the update sheet is
+    // being opened offline so the confirm action can queue the status change
+    // locally instead of trying a network write immediately.
     Connectivity().checkConnectivity().then((results) {
-      if (mounted) safeSetState(() => _isOffline = results.every((r) => r == ConnectivityResult.none));
+      if (mounted) {
+        safeSetState(() =>
+            _isOffline = results.every((r) => r == ConnectivityResult.none));
+      }
     });
+    // LOCAL RESOURCE: connectivity_plus — keep the sheet's offline flag in
+    // sync while it is open so the user gets the correct online/offline save
+    // behavior even if connectivity changes mid-review.
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
-      if (mounted) safeSetState(() => _isOffline = results.every((r) => r == ConnectivityResult.none));
+      if (mounted) {
+        safeSetState(() =>
+            _isOffline = results.every((r) => r == ConnectivityResult.none));
+      }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
@@ -697,22 +709,40 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                             0.0),
                                                   ),
                                                   child: TextField(
-                                                    controller: _model.reviewerNoteController,
+                                                    controller: _model
+                                                        .reviewerNoteController,
                                                     maxLines: 4,
                                                     minLines: 3,
                                                     decoration: InputDecoration(
-                                                      hintText: 'Add a note for the applicant (optional)...',
-                                                      hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
-                                                            font: GoogleFonts.inter(),
-                                                            color: FlutterFlowTheme.of(context).secondaryText,
-                                                            letterSpacing: 0.0,
-                                                          ),
+                                                      hintText:
+                                                          'Add a note for the applicant (optional)...',
+                                                      hintStyle:
+                                                          FlutterFlowTheme.of(
+                                                                  context)
+                                                              .bodySmall
+                                                              .override(
+                                                                font: GoogleFonts
+                                                                    .inter(),
+                                                                color: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .secondaryText,
+                                                                letterSpacing:
+                                                                    0.0,
+                                                              ),
                                                       border: InputBorder.none,
-                                                      contentPadding: const EdgeInsets.all(8.0),
+                                                      contentPadding:
+                                                          const EdgeInsets.all(
+                                                              8.0),
                                                     ),
-                                                    style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                                          font: GoogleFonts.inter(),
-                                                          color: FlutterFlowTheme.of(context).primaryText,
+                                                    style: FlutterFlowTheme.of(
+                                                            context)
+                                                        .bodyMedium
+                                                        .override(
+                                                          font: GoogleFonts
+                                                              .inter(),
+                                                          color: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .primaryText,
                                                           letterSpacing: 0.0,
                                                         ),
                                                   ),
@@ -1051,15 +1081,21 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                           .update({
                                                         'status': newStatus
                                                       }).eq('id', id);
-                                                      final note = _model.reviewerNoteController.text.trim();
+                                                      final note = _model
+                                                          .reviewerNoteController
+                                                          .text
+                                                          .trim();
                                                       await supabase
-                                                          .from('status_history')
+                                                          .from(
+                                                              'status_history')
                                                           .insert({
                                                         'application_id': id,
-                                                        'changed_by': reviewerId,
+                                                        'changed_by':
+                                                            reviewerId,
                                                         'old_status': oldStatus,
                                                         'new_status': newStatus,
-                                                        if (note.isNotEmpty) 'note': note,
+                                                        if (note.isNotEmpty)
+                                                          'note': note,
                                                       });
                                                       Object? notificationError;
                                                       // Send notification if the notify switch is on.
@@ -1074,10 +1110,19 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                               .invoke(
                                                             'send-notification',
                                                             body: {
-                                                              'application_id': id,
-                                                              'channels': ['email', 'sms'],
-                                                              'status': newStatus,
-                                                              'reviewer_note': _model.reviewerNoteController.text.trim(),
+                                                              'application_id':
+                                                                  id,
+                                                              'channels': [
+                                                                'email',
+                                                                'sms'
+                                                              ],
+                                                              'status':
+                                                                  newStatus,
+                                                              'reviewer_note':
+                                                                  _model
+                                                                      .reviewerNoteController
+                                                                      .text
+                                                                      .trim(),
                                                             },
                                                           );
                                                         } catch (e) {
@@ -1106,31 +1151,54 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                       debugPrint(
                                                           'Status update failed: $e');
                                                       final msg = e.toString();
-                                                      final isOffline = msg.contains('SocketException') ||
-                                                          msg.contains('Failed host lookup') ||
-                                                          msg.contains('ClientException') ||
-                                                          msg.contains('Network is unreachable');
-                                                      if (isOffline && newStatus != null) {
+                                                      final isOffline = msg
+                                                              .contains(
+                                                                  'SocketException') ||
+                                                          msg.contains(
+                                                              'Failed host lookup') ||
+                                                          msg.contains(
+                                                              'ClientException') ||
+                                                          msg.contains(
+                                                              'Network is unreachable');
+                                                      if (isOffline &&
+                                                          newStatus != null) {
                                                         _enqueueOfflineUpdate(
-                                                          id, newStatus,
-                                                          note: _model.reviewerNoteController.text.trim(),
-                                                          notify: _model.stdSwitchModel.switchValue ?? true,
+                                                          id,
+                                                          newStatus,
+                                                          note: _model
+                                                              .reviewerNoteController
+                                                              .text
+                                                              .trim(),
+                                                          notify: _model
+                                                                  .stdSwitchModel
+                                                                  .switchValue ??
+                                                              true,
                                                         );
                                                         if (context.mounted) {
-                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                          ScaffoldMessenger.of(
+                                                                  context)
+                                                              .showSnackBar(
                                                             const SnackBar(
-                                                              content: Text('Saved offline — will sync when reconnected.'),
-                                                              backgroundColor: Color(0xFFF59E0B),
+                                                              content: Text(
+                                                                  'Saved offline — will sync when reconnected.'),
+                                                              backgroundColor:
+                                                                  Color(
+                                                                      0xFFF59E0B),
                                                             ),
                                                           );
                                                           context.safePop();
                                                         }
                                                       } else {
-                                                        safeSetState(() => _model.isSubmitting = false);
+                                                        safeSetState(() =>
+                                                            _model.isSubmitting =
+                                                                false);
                                                         if (context.mounted) {
-                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                          ScaffoldMessenger.of(
+                                                                  context)
+                                                              .showSnackBar(
                                                             SnackBar(
-                                                              content: Text('Status update failed: $e'),
+                                                              content: Text(
+                                                                  'Status update failed: $e'),
                                                             ),
                                                           );
                                                         }

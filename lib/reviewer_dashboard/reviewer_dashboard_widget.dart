@@ -3,6 +3,7 @@ import '/components/filter_box_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import '/settings/settings_widget.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -458,9 +459,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
                           color: FlutterFlowTheme.of(context).primary,
                           size: 24.0,
                         ),
-                        onPressed: () {
-                          print('IconButton pressed ...');
-                        },
+                        onPressed: () => context.push(SettingsWidget.routePath),
                       ),
                     ],
                   ),
