@@ -36,6 +36,12 @@ class ResultCardBa0b34d0Widget extends StatefulWidget {
 class _ResultCardBa0b34d0WidgetState extends State<ResultCardBa0b34d0Widget> {
   late ResultCardBa0b34d0Model _model;
 
+  bool get _hasDisplayableNotes {
+    final value = widget.notes?.trim() ?? '';
+    if (value.isEmpty) return false;
+    return value.toLowerCase() != 'application received via email';
+  }
+
   @override
   void setState(VoidCallback callback) {
     super.setState(callback);
@@ -546,60 +552,65 @@ class _ResultCardBa0b34d0WidgetState extends State<ResultCardBa0b34d0Widget> {
                   ),
                 ),
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Color(0xFFFFF4E5),
-                  borderRadius: BorderRadius.circular(0.0),
-                  border: Border.all(
-                    color: Color(0xFFFFE0B2),
-                    width: 1.0,
+              if ((widget.has_notes == true || _hasDisplayableNotes) &&
+                  _hasDisplayableNotes)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Color(0xFFFFF4E5),
+                    borderRadius: BorderRadius.circular(0.0),
+                    border: Border.all(
+                      color: Color(0xFFFFE0B2),
+                      width: 1.0,
+                    ),
                   ),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'REVIEWER NOTES',
-                        style: FlutterFlowTheme.of(context).labelSmall.override(
-                              font: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                fontStyle: FlutterFlowTheme.of(context)
-                                    .labelSmall
-                                    .fontStyle,
-                              ),
-                              color: FlutterFlowTheme.of(context).error,
-                              fontSize: 10.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.bold,
-                              fontStyle: FlutterFlowTheme.of(context)
-                                  .labelSmall
-                                  .fontStyle,
-                              lineHeight: 1.2,
-                            ),
-                      ),
-                      Text(
-                        widget!.notes!,
-                        style: FlutterFlowTheme.of(context).bodySmall.override(
-                              font: GoogleFonts.inter(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'REVIEWER NOTES',
+                          style:
+                              FlutterFlowTheme.of(context).labelSmall.override(
+                                    font: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      fontStyle: FlutterFlowTheme.of(context)
+                                          .labelSmall
+                                          .fontStyle,
+                                    ),
+                                    color: FlutterFlowTheme.of(context).error,
+                                    fontSize: 10.0,
+                                    letterSpacing: 0.0,
+                                    fontWeight: FontWeight.bold,
+                                    fontStyle: FlutterFlowTheme.of(context)
+                                        .labelSmall
+                                        .fontStyle,
+                                    lineHeight: 1.2,
+                                  ),
+                        ),
+                        Text(
+                          widget.notes!.trim(),
+                          style: FlutterFlowTheme.of(context)
+                              .bodySmall
+                              .override(
+                                font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.normal,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                color: FlutterFlowTheme.of(context).primaryText,
+                                fontSize: 12.0,
+                                letterSpacing: 0.0,
                                 fontWeight: FontWeight.normal,
                                 fontStyle: FontStyle.italic,
+                                lineHeight: 1.4,
                               ),
-                              color: FlutterFlowTheme.of(context).primaryText,
-                              fontSize: 12.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.normal,
-                              fontStyle: FontStyle.italic,
-                              lineHeight: 1.4,
-                            ),
-                      ),
-                    ].divide(SizedBox(height: 4.0)),
+                        ),
+                      ].divide(SizedBox(height: 4.0)),
+                    ),
                   ),
                 ),
-              ),
             ].divide(SizedBox(height: 16.0)),
           ),
         ),

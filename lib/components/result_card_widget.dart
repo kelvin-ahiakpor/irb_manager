@@ -35,6 +35,12 @@ class ResultCardWidget extends StatefulWidget {
 class _ResultCardWidgetState extends State<ResultCardWidget> {
   late ResultCardModel _model;
 
+  bool get _hasDisplayableNotes {
+    final value = widget.notes?.trim() ?? '';
+    if (value.isEmpty) return false;
+    return value.toLowerCase() != 'application received via email';
+  }
+
   @override
   void setState(VoidCallback callback) {
     super.setState(callback);
@@ -159,18 +165,22 @@ class _ResultCardWidgetState extends State<ResultCardWidget> {
                     return Container(
                       decoration: BoxDecoration(
                         color: chipColor.withOpacity(0.12),
-                        border: Border.all(color: chipColor.withOpacity(0.5), width: 2.0),
+                        border: Border.all(
+                            color: chipColor.withOpacity(0.5), width: 2.0),
                       ),
                       child: Padding(
-                        padding: EdgeInsetsDirectional.fromSTEB(12.0, 6.0, 12.0, 6.0),
+                        padding: EdgeInsetsDirectional.fromSTEB(
+                            12.0, 6.0, 12.0, 6.0),
                         child: Text(
                           valueOrDefault<String>(widget.status, 'UNDER REVIEW'),
-                          style: FlutterFlowTheme.of(context).labelMedium.override(
-                                font: GoogleFonts.inter(fontWeight: FontWeight.bold),
-                                color: chipColor,
-                                fontSize: 12.0,
-                                letterSpacing: 0.0,
-                              ),
+                          style:
+                              FlutterFlowTheme.of(context).labelMedium.override(
+                                    font: GoogleFonts.inter(
+                                        fontWeight: FontWeight.bold),
+                                    color: chipColor,
+                                    fontSize: 12.0,
+                                    letterSpacing: 0.0,
+                                  ),
                         ),
                       ),
                     );
@@ -534,7 +544,8 @@ class _ResultCardWidgetState extends State<ResultCardWidget> {
                   ),
                 ),
               ),
-              if (widget.has_notes == true && (widget.notes?.isNotEmpty ?? false))
+              if ((widget.has_notes == true || _hasDisplayableNotes) &&
+                  _hasDisplayableNotes)
                 Container(
                   decoration: BoxDecoration(
                     color: Color(0xFFFFF4E5),
@@ -556,7 +567,7 @@ class _ResultCardWidgetState extends State<ResultCardWidget> {
                           ),
                         ),
                         Text(
-                          widget.notes!,
+                          widget.notes!.trim(),
                           style: GoogleFonts.inter(
                             fontStyle: FontStyle.italic,
                             color: const Color(0xFF2D1A00),

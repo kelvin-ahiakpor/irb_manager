@@ -28,6 +28,7 @@ const IRB_MAILBOX          = Deno.env.get('IRB_MAILBOX')!
 const SUPABASE_URL         = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CRON_SECRET          = Deno.env.get('CRON_SECRET')!
+const SEND_NOTIFICATION_URL = `${SUPABASE_URL}/functions/v1/send-notification`
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ interface GraphMessage {
   from: { emailAddress: { name: string; address: string } }
   receivedDateTime: string
   hasAttachments: boolean
+  isRead: boolean
 }
 
 interface GraphAttachment {
@@ -47,6 +49,7 @@ interface GraphAttachment {
   contentType: string
   contentBytes: string   // base64
   size: number
+  '@odata.type'?: string
 }
 
 // ─── Graph API helpers ────────────────────────────────────────────────────────
@@ -76,16 +79,14 @@ async function getAccessToken(): Promise<string> {
 const IRB_SUBJECT_PREFIX = 'IRB Application'
 
 async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
-  // $search scopes to IRB submissions so random inbox mail is never processed
   const params = new URLSearchParams({
-    '$search':  `"${IRB_SUBJECT_PREFIX}"`,
-    '$filter':  'isRead eq false',
+    '$filter':  `isRead eq false and contains(subject,'${IRB_SUBJECT_PREFIX}')`,
     '$select':  'id,subject,body,bodyPreview,from,receivedDateTime,hasAttachments,isRead',
     '$top':     '20',
   })
   const res  = await fetch(
     `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/mailFolders/inbox/messages?${params}`,
-    { headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' } }
+    { headers: { Authorization: `Bearer ${token}` } }
   )
   const text = await res.text()
   if (!res.ok) {
@@ -95,7 +96,7 @@ async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
   if (!Array.isArray(data.value)) {
     throw new Error(`Unexpected Graph response: ${text}`)
   }
-  // Secondary guard: skip anything already read or without the prefix
+  // Secondary guard in case Graph filtering behaves differently than expected.
   return data.value.filter((m: GraphMessage) =>
     !m.isRead && m.subject?.includes(IRB_SUBJECT_PREFIX)
   )
@@ -103,7 +104,7 @@ async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
 
 async function fetchAttachments(token: string, messageId: string): Promise<GraphAttachment[]> {
   const res  = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,size`,
+    `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}/attachments?$select=id,name,contentType,size`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
   const text = await res.text()
@@ -114,14 +115,43 @@ async function fetchAttachments(token: string, messageId: string): Promise<Graph
   if (!Array.isArray(data.value)) {
     throw new Error(`Unexpected Graph attachments response: ${text}`)
   }
-  const all = data.value as GraphAttachment[]
-  console.log(`mailbox-poller attachments [${messageId}]: graph returned ${all.length}`)
-  for (const att of all) {
+  const metadata = data.value as GraphAttachment[]
+  console.log(`mailbox-poller attachments [${messageId}]: graph returned ${metadata.length}`)
+  const supported: GraphAttachment[] = []
+
+  for (const att of metadata) {
     console.log(
-      `mailbox-poller attachments [${messageId}]: name="${att.name}" type="${att.contentType}" size=${att.size ?? 'unknown'} hasContentBytes=${Boolean(att.contentBytes)}`
+      `mailbox-poller attachments [${messageId}]: name="${att.name}" type="${att.contentType}" size=${att.size ?? 'unknown'} odataType=${att['@odata.type'] ?? 'unknown'}`
     )
+
+    const detailRes = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}/attachments/${att.id}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    const detailText = await detailRes.text()
+    if (!detailRes.ok) {
+      console.error(`mailbox-poller attachments [${messageId}]: detail fetch failed for "${att.name}" (${detailRes.status}) ${detailText}`)
+      continue
+    }
+
+    const detail = JSON.parse(detailText) as GraphAttachment
+    console.log(
+      `mailbox-poller attachments [${messageId}]: detail for "${att.name}" hasContentBytes=${Boolean(detail.contentBytes)}`
+    )
+    if (!detail.contentBytes) {
+      continue
+    }
+
+    supported.push({
+      id: detail.id,
+      name: detail.name,
+      contentType: detail.contentType,
+      contentBytes: detail.contentBytes,
+      size: detail.size,
+      '@odata.type': detail['@odata.type'],
+    })
   }
-  const supported = all.filter((a: GraphAttachment) => a.contentBytes)
+
   console.log(`mailbox-poller attachments [${messageId}]: usable contentBytes attachments ${supported.length}`)
   return supported
 }
@@ -156,6 +186,19 @@ function extractStudentId(subject: string, bodyText: string): string {
   return match ? match[0] : ''
 }
 
+function extractStudentPhone(bodyText: string): string | null {
+  const compact = bodyText.replace(/[\s()-]/g, '')
+  const intlMatch = compact.match(/\+233\d{9}\b/)
+  if (intlMatch) return intlMatch[0]
+
+  const localMatch = compact.match(/\b0\d{9}\b/)
+  if (localMatch) {
+    return `+233${localMatch[0].slice(1)}`
+  }
+
+  return null
+}
+
 function extractResearchTitle(subject: string): string {
   // Strip leading student ID if present: "47822026 IRB Application: ..."
   const withoutId = subject.replace(/^\d{6,10}\s+/, '').trim()
@@ -166,6 +209,27 @@ function extractResearchTitle(subject: string): string {
 
 function normaliseName(name: string): string {
   return name.replace(/\s+/g, ' ').trim()
+}
+
+async function triggerSubmissionNotifications(applicationId: string): Promise<void> {
+  const res = await fetch(SEND_NOTIFICATION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    },
+    body: JSON.stringify({
+      application_id: applicationId,
+      channels: ['push', 'email', 'sms'],
+      status: 'PENDING',
+      reviewer_note: 'Application received via email.',
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`send-notification ${res.status}: ${text}`)
+  }
 }
 
 // ─── Core processor ───────────────────────────────────────────────────────────
@@ -185,6 +249,7 @@ async function processEmail(
       : email.body.content
 
     const studentId     = extractStudentId(email.subject, bodyText)
+    const studentPhone  = extractStudentPhone(bodyText)
     const researchTitle = extractResearchTitle(email.subject)
 
     const { data: existing } = await supabase
@@ -206,6 +271,7 @@ async function processEmail(
         student_id:        studentId || senderEmail,
         student_name:      senderName,
         student_email:     senderEmail,
+        student_phone:     studentPhone,
         subject:           researchTitle,
         body:              bodyText,
         status:            'PENDING',
@@ -222,7 +288,6 @@ async function processEmail(
       changed_by:     null,
       old_status:     null,
       new_status:     'PENDING',
-      note:           'Application received via email',
     })
 
     console.log(`mailbox-poller [${messageId}]: hasAttachments=${Boolean(email.hasAttachments)}`)
@@ -265,6 +330,13 @@ async function processEmail(
       }
     } else {
       console.log(`mailbox-poller [${messageId}]: email reported no attachments`)
+    }
+
+    try {
+      await triggerSubmissionNotifications(app.id)
+      console.log(`mailbox-poller [${messageId}]: send-notification triggered for ${app.id}`)
+    } catch (notificationErr) {
+      console.error(`mailbox-poller [${messageId}]: send-notification failed`, notificationErr)
     }
 
     await markAsRead(token, messageId)

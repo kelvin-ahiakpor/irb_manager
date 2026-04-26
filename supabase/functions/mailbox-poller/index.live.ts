@@ -28,6 +28,7 @@ const IRB_MAILBOX          = Deno.env.get('IRB_MAILBOX')!
 const SUPABASE_URL         = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CRON_SECRET          = Deno.env.get('CRON_SECRET')!
+const SEND_NOTIFICATION_URL = `${SUPABASE_URL}/functions/v1/send-notification`
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,19 @@ function extractStudentId(subject: string, bodyText: string): string {
   return match ? match[0] : ''
 }
 
+function extractStudentPhone(bodyText: string): string | null {
+  const compact = bodyText.replace(/[\s()-]/g, '')
+  const intlMatch = compact.match(/\+233\d{9}\b/)
+  if (intlMatch) return intlMatch[0]
+
+  const localMatch = compact.match(/\b0\d{9}\b/)
+  if (localMatch) {
+    return `+233${localMatch[0].slice(1)}`
+  }
+
+  return null
+}
+
 function extractResearchTitle(subject: string): string {
   // Strip leading student ID if present: "47822026 IRB Application: ..."
   const withoutId = subject.replace(/^\d{6,10}\s+/, '').trim()
@@ -149,6 +163,27 @@ function extractResearchTitle(subject: string): string {
 
 function normaliseName(name: string): string {
   return name.replace(/\s+/g, ' ').trim()
+}
+
+async function triggerSubmissionNotifications(applicationId: string): Promise<void> {
+  const res = await fetch(SEND_NOTIFICATION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    },
+    body: JSON.stringify({
+      application_id: applicationId,
+      channels: ['push', 'email', 'sms'],
+      status: 'PENDING',
+      reviewer_note: 'Application received via email.',
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`send-notification ${res.status}: ${text}`)
+  }
 }
 
 // ─── Core processor ───────────────────────────────────────────────────────────
@@ -182,6 +217,7 @@ async function processEmail(
       : email.body.content
 
     const studentId     = extractStudentId(email.subject, bodyText)
+    const studentPhone  = extractStudentPhone(bodyText)
     const researchTitle = extractResearchTitle(email.subject)
 
     const { data: app, error: appErr } = await supabase
@@ -190,6 +226,7 @@ async function processEmail(
         student_id:        studentId || senderEmail,
         student_name:      senderName,
         student_email:     senderEmail,
+        student_phone:     studentPhone,
         subject:           researchTitle,
         body:              bodyText,
         status:            'PENDING',
@@ -206,7 +243,6 @@ async function processEmail(
       changed_by:     null,
       old_status:     null,
       new_status:     'PENDING',
-      note:           'Application received via email',
     })
 
     if (email.hasAttachments) {
@@ -235,6 +271,13 @@ async function processEmail(
           storage_url:    storagePath,
         })
       }
+    }
+
+    try {
+      await triggerSubmissionNotifications(app.id)
+      console.log(`mailbox-poller [${messageId}]: send-notification triggered for ${app.id}`)
+    } catch (notificationErr) {
+      console.error(`mailbox-poller [${messageId}]: send-notification failed`, notificationErr)
     }
 
     await markAsRead(token, messageId)

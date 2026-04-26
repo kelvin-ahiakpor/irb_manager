@@ -175,6 +175,12 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
     return '$first $middleInitials $last';
   }
 
+  bool _hasReviewerNote(String? note) {
+    final value = note?.trim() ?? '';
+    if (value.isEmpty) return false;
+    return value.toLowerCase() != 'application received via email';
+  }
+
   Future<void> _deleteApplication() async {
     final id = widget.applicationId;
     if (id == null || id.isEmpty) return;
@@ -1423,7 +1429,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                             .secondaryText,
                                         letterSpacing: 0.0,
                                       )),
-                            if (note != null && note.isNotEmpty) ...[
+                            if (_hasReviewerNote(note)) ...[
                               const SizedBox(height: 6),
                               Container(
                                 padding: const EdgeInsets.all(10),
@@ -1434,7 +1440,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                       color:
                                           FlutterFlowTheme.of(context).divider),
                                 ),
-                                child: Text(note,
+                                child: Text(note!.trim(),
                                     style: FlutterFlowTheme.of(context)
                                         .bodySmall
                                         .override(
