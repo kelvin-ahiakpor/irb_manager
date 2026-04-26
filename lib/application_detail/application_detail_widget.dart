@@ -44,7 +44,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
 
     Connectivity().checkConnectivity().then((results) {
       if (mounted) {
-        safeSetState(() => _isOffline = results.every((r) => r == ConnectivityResult.none));
+        safeSetState(() =>
+            _isOffline = results.every((r) => r == ConnectivityResult.none));
       }
     });
 
@@ -257,7 +258,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
           children: [
             Container(
               child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, _model.fromCache ? 148.0 : 120.0),
+                padding: EdgeInsetsDirectional.fromSTEB(
+                    0.0, 0.0, 0.0, _model.fromCache ? 148.0 : 120.0),
                 child: SingleChildScrollView(
                   primary: false,
                   child: Column(
@@ -439,9 +441,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                 children: [
                                   Expanded(
                                     flex: 1,
-                                    child: _infoText(
-                                        context,
-                                        'STUDENT ID',
+                                    child: _infoText(context, 'STUDENT ID',
                                         (app['student_id'] as String?) ?? '—'),
                                   ),
                                   Expanded(
@@ -782,9 +782,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                       FlutterFlowTheme.of(context).primaryText,
                                   size: 24.0,
                                 ),
-                                onPressed: () {
-                                  print('IconButton pressed ...');
-                                },
+                                onPressed: () => _showOptionsSheet(context),
                               ),
                             ],
                           ),
@@ -804,8 +802,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Builder(builder: (context) {
-                      final pending = _pendingQueuedChanges(
-                          widget.applicationId ?? '');
+                      final pending =
+                          _pendingQueuedChanges(widget.applicationId ?? '');
                       if (pending == 0) return const SizedBox.shrink();
                       return Container(
                         color: const Color(0xFF78350F),
@@ -893,8 +891,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                       color: FlutterFlowTheme.of(context)
                                           .secondaryBackground,
                                       border: Border.all(
-                                        color:
-                                            FlutterFlowTheme.of(context).divider,
+                                        color: FlutterFlowTheme.of(context)
+                                            .divider,
                                         width: 3,
                                       ),
                                     ),
@@ -918,11 +916,13 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                                         context)
                                                     .titleSmall
                                                     .override(
-                                                      font: GoogleFonts.zillaSlab(
-                                                          fontWeight:
-                                                              FontWeight.w800),
-                                                      color:
-                                                          const Color(0xFF92400E),
+                                                      font:
+                                                          GoogleFonts.zillaSlab(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800),
+                                                      color: const Color(
+                                                          0xFF92400E),
                                                       letterSpacing: 0.0,
                                                     ),
                                               ),
@@ -937,9 +937,9 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                                 .bodyMedium
                                                 .override(
                                                   font: GoogleFonts.inter(),
-                                                  color:
-                                                      FlutterFlowTheme.of(context)
-                                                          .primaryText,
+                                                  color: FlutterFlowTheme.of(
+                                                          context)
+                                                      .primaryText,
                                                   letterSpacing: 0.0,
                                                   lineHeight: 1.5,
                                                 ),
@@ -959,9 +959,9 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                                   onTap: () =>
                                                       Navigator.pop(ctx, false),
                                                   child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                            vertical: 14),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 14),
                                                     decoration: BoxDecoration(
                                                       border: Border(
                                                         top: BorderSide(
@@ -986,13 +986,12 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                                                     context)
                                                                 .labelMedium
                                                                 .override(
-                                                                  font: GoogleFonts
-                                                                      .inter(
-                                                                          fontWeight:
-                                                                              FontWeight.bold),
-                                                                  color: FlutterFlowTheme
-                                                                          .of(
-                                                                              context)
+                                                                  font: GoogleFonts.inter(
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .bold),
+                                                                  color: FlutterFlowTheme.of(
+                                                                          context)
                                                                       .secondaryText,
                                                                   letterSpacing:
                                                                       0.0,
@@ -1007,9 +1006,9 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                                   onTap: () =>
                                                       Navigator.pop(ctx, true),
                                                   child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                            vertical: 14),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 14),
                                                     decoration: BoxDecoration(
                                                       color:
                                                           FlutterFlowTheme.of(
@@ -1027,20 +1026,19 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                                     child: Center(
                                                       child: Text(
                                                         'CONTINUE',
-                                                        style:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .labelMedium
-                                                                .override(
-                                                                  font: GoogleFonts
-                                                                      .inter(
-                                                                          fontWeight:
-                                                                              FontWeight.bold),
-                                                                  color: Colors
-                                                                      .white,
-                                                                  letterSpacing:
-                                                                      0.0,
-                                                                ),
+                                                        style: FlutterFlowTheme
+                                                                .of(context)
+                                                            .labelMedium
+                                                            .override(
+                                                              font: GoogleFonts.inter(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold),
+                                                              color:
+                                                                  Colors.white,
+                                                              letterSpacing:
+                                                                  0.0,
+                                                            ),
                                                       ),
                                                     ),
                                                   ),
@@ -1174,7 +1172,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       try {
         rows = List<Map<String, dynamic>>.from(await supabase
             .from('status_history')
-            .select('old_status, new_status, note, changed_at, reviewers(email)')
+            .select(
+                'old_status, new_status, note, changed_at, reviewers(email)')
             .eq('application_id', id)
             .order('changed_at', ascending: false));
       } catch (_) {
@@ -1229,7 +1228,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                   Expanded(
                     child: Text('STATUS HISTORY',
                         style: FlutterFlowTheme.of(context).labelLarge.override(
-                              font: GoogleFonts.inter(fontWeight: FontWeight.w800),
+                              font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w800),
                               letterSpacing: 0.0,
                             )),
                   ),
@@ -1257,9 +1257,12 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
               child: history.isEmpty
                   ? Center(
                       child: Text('No status changes yet.',
-                          style: FlutterFlowTheme.of(context).bodyMedium.override(
+                          style: FlutterFlowTheme.of(context)
+                              .bodyMedium
+                              .override(
                                 font: GoogleFonts.inter(),
-                                color: FlutterFlowTheme.of(context).secondaryText,
+                                color:
+                                    FlutterFlowTheme.of(context).secondaryText,
                                 letterSpacing: 0.0,
                               )))
                   : ListView.separated(
@@ -1275,7 +1278,8 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                         final newS = h['new_status'] as String? ?? '—';
                         final note = h['note'] as String?;
                         final changedAt = h['changed_at'] as String?;
-                        final reviewer = (h['reviewers'] as Map?)?['email'] as String?;
+                        final reviewer =
+                            (h['reviewers'] as Map?)?['email'] as String?;
                         final dt = changedAt != null
                             ? DateTime.tryParse(changedAt)?.toLocal()
                             : null;
@@ -1450,6 +1454,26 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       'CONDITIONALLY APPROVED' => const Color(0xFFE06A3B),
       _ => FlutterFlowTheme.of(context).secondary,
     };
+  }
+
+  Future<void> _showOptionsSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.close_rounded),
+                title: const Text('Close'),
+                onTap: () => Navigator.of(sheetContext).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   String _formatSubmittedDate(Object? value) {
