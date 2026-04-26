@@ -1,72 +1,249 @@
-// Ashesi IRB Manager — mailbox-poller Edge Function
+// Ashesi IRB Manager — mailbox-poller (LIVE / Graph API implementation)
 //
-// ⚠️  MOCK MODE — real Graph API call is stubbed out.
-// Waiting on IT/lecturer to provision a test M365 mailbox with
-// Application-level Mail.Read permission + admin consent.
+// This is the production version. Use this when an M365 mailbox with
+// Application-level Mail.Read permission + admin consent is available.
 //
-// TO SWITCH TO LIVE:
-//   cp supabase/functions/mailbox-poller/index.live.ts \
-//      supabase/functions/mailbox-poller/index.ts
+// TO ACTIVATE:
+//   cp index.live.ts index.ts
 //   supabase functions deploy mailbox-poller
 //
-// The full Graph API implementation is in index.live.ts.
+// PREREQUISITES (Azure Portal):
+//   - App registration → API permissions → Microsoft Graph
+//   - Add: Mail.Read (Delegated), offline_access (Delegated)
+//   - Supported account types: personal Microsoft accounts (or All)
+//   - No admin consent needed — just user consent via the one-time OAuth flow
+//
+// ONE-TIME SETUP to get OUTLOOK_REFRESH_TOKEN — see README or ask Claude.
+//
+// SECRETS REQUIRED (set via `supabase secrets set`):
+//   AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, OUTLOOK_REFRESH_TOKEN, IRB_MAILBOX
+//   SB_URL, SB_SERVICE_ROLE_KEY, CRON_SECRET
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const CLIENT_ID            = Deno.env.get('AZURE_CLIENT_ID')!
+const CLIENT_SECRET        = Deno.env.get('AZURE_CLIENT_SECRET')!
+const REFRESH_TOKEN        = Deno.env.get('OUTLOOK_REFRESH_TOKEN')!
+const IRB_MAILBOX          = Deno.env.get('IRB_MAILBOX')!
 const SUPABASE_URL         = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CRON_SECRET          = Deno.env.get('CRON_SECRET')!
 
-// ─── Mock email payloads ──────────────────────────────────────────────────────
-// These simulate what the real Graph API would return from the IRB inbox.
-// Each run inserts one new application so we can test the dashboard + status flow.
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const MOCK_EMAILS = [
-  {
-    studentName:  'Kojo Mensah',
-    studentEmail: 'kojo.mensah@ashesi.edu.gh',
-    studentId:    '88292024',
-    studentPhone: '+233 24 123 4567',
-    subject:      'IRB Application — Impact of FinTech on Rural Savings in Central Ghana',
-    body:         'Dear IRB Committee,\n\nI am submitting my research ethics application for review. My study investigates the impact of mobile money platforms on savings behaviour among rural households in the Ashanti and Central regions of Ghana.\n\nParticipant pool: 120 adults (18+), recruited via community leaders.\nData collection: structured interviews, anonymised.\nRisk level: minimal.\n\nPlease find attached my full protocol and consent form.\n\nRegards,\nKojo Mensah\nStudent ID: 88292024',
-    attachments: [
-      { name: 'IRB_Protocol_KojoMensah.pdf',  contentType: 'application/pdf' },
-      { name: 'Consent_Form_KojoMensah.pdf',  contentType: 'application/pdf' },
-    ],
-  },
-  {
-    studentName:  'Aba Williams',
-    studentEmail: 'aba.williams@ashesi.edu.gh',
-    studentId:    '11022025',
-    studentPhone: '+233 20 987 6543',
-    subject:      'IRB Application — Mental Health Awareness in Secondary Schools',
-    body:         'Dear IRB Committee,\n\nI am requesting approval to conduct research on mental health awareness among JHS and SHS students in the Greater Accra region.\n\nParticipant pool: 200 students (13–18), parental consent obtained.\nData collection: anonymous questionnaire.\nRisk level: minimal.\n\nAttached are the full protocol, survey instrument, and parental consent form.\n\nBest,\nAba Williams\nStudent ID: 11022025',
-    attachments: [
-      { name: 'Protocol_AbaWilliams.pdf',      contentType: 'application/pdf' },
-      { name: 'Survey_Instrument.pdf',          contentType: 'application/pdf' },
-      { name: 'Parental_Consent_Form.pdf',      contentType: 'application/pdf' },
-    ],
-  },
-  {
-    studentName:  'Nana Adjei',
-    studentEmail: 'nana.adjei@ashesi.edu.gh',
-    studentId:    '55671923',
-    studentPhone: '+233 27 456 7890',
-    subject:      'IRB Application — AI-Assisted Diagnostics in Rural Clinics',
-    body:         'Dear Committee,\n\nThis application seeks ethical clearance for a study evaluating AI-assisted diagnostic tools in three rural clinics in the Eastern Region.\n\nParticipant pool: 50 clinic staff + 300 patients.\nData: de-identified diagnostic records + staff interviews.\nRisk: low — no experimental interventions.\n\nFull protocol and data management plan attached.\n\nSincerely,\nNana Adjei\nStudent ID: 55671923',
-    attachments: [
-      { name: 'AI_Diagnostics_Protocol.pdf',   contentType: 'application/pdf' },
-      { name: 'Data_Management_Plan.docx',      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-    ],
-  },
-]
+interface GraphMessage {
+  id: string
+  subject: string
+  bodyPreview: string
+  body: { contentType: string; content: string }
+  from: { emailAddress: { name: string; address: string } }
+  receivedDateTime: string
+  hasAttachments: boolean
+}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+interface GraphAttachment {
+  id: string
+  name: string
+  contentType: string
+  contentBytes: string   // base64
+  size: number
+}
 
-function pickMockEmail() {
-  // Rotate through mock emails based on minute so repeated calls give variety
-  const index = Math.floor(Date.now() / 60000) % MOCK_EMAILS.length
-  return MOCK_EMAILS[index]
+// ─── Graph API helpers ────────────────────────────────────────────────────────
+
+async function getAccessToken(): Promise<string> {
+  const res = await fetch(
+    'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'refresh_token',
+        client_id:     CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        refresh_token: REFRESH_TOKEN,
+        scope:         'Mail.Read offline_access',
+      }),
+    }
+  )
+  const data = await res.json()
+  if (!data.access_token) {
+    throw new Error(`Token refresh failed: ${JSON.stringify(data)}`)
+  }
+  return data.access_token as string
+}
+
+const IRB_SUBJECT_PREFIX = 'IRB Application'
+
+async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
+  // $search scopes to IRB submissions so random inbox mail is never processed
+  const params = new URLSearchParams({
+    '$search':  `"${IRB_SUBJECT_PREFIX}"`,
+    '$select':  'id,subject,body,bodyPreview,from,receivedDateTime,hasAttachments',
+    '$top':     '20',
+  })
+  const res  = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/mailFolders/inbox/messages?${params}`,
+    { headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' } }
+  )
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error(`Graph messages API ${res.status}: ${text}`)
+  }
+  const data = JSON.parse(text)
+  if (!Array.isArray(data.value)) {
+    throw new Error(`Unexpected Graph response: ${text}`)
+  }
+  // Secondary guard: skip anything already read or without the prefix
+  return data.value.filter((m: GraphMessage) =>
+    m.subject?.includes(IRB_SUBJECT_PREFIX)
+  )
+}
+
+async function fetchAttachments(token: string, messageId: string): Promise<GraphAttachment[]> {
+  const res  = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,size`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  const data = await res.json()
+  return (data.value ?? []).filter((a: GraphAttachment) => a.contentBytes)
+}
+
+async function markAsRead(token: string, messageId: string): Promise<void> {
+  await fetch(
+    `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}`,
+    {
+      method:  'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ isRead: true }),
+    }
+  )
+}
+
+// ─── Parsing helpers ──────────────────────────────────────────────────────────
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function extractStudentId(subject: string, bodyText: string): string {
+  const match = (subject + ' ' + bodyText).match(/\b\d{8}\b/)
+  return match ? match[0] : ''
+}
+
+function extractResearchTitle(subject: string): string {
+  // Strip leading student ID if present: "47822026 IRB Application: ..."
+  const withoutId = subject.replace(/^\d{6,10}\s+/, '').trim()
+  // Strip "IRB Application:" / "IRB Application —" prefix
+  const withoutPrefix = withoutId.replace(/^IRB Application[\s:—–-]+/i, '').trim()
+  return withoutPrefix || withoutId
+}
+
+function normaliseName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim()
+}
+
+// ─── Core processor ───────────────────────────────────────────────────────────
+
+async function processEmail(
+  email: GraphMessage,
+  token: string,
+  supabase: ReturnType<typeof createClient>
+): Promise<{ messageId: string; status: 'inserted' | 'skipped' | 'error'; detail?: string }> {
+  const messageId = email.id
+
+  try {
+    const senderEmail = email.from.emailAddress.address
+    const senderName  = normaliseName(email.from.emailAddress.name || senderEmail)
+
+    const { data: existing } = await supabase
+      .from('applications')
+      .select('id')
+      .eq('student_email', senderEmail)
+      .eq('subject', email.subject)
+      .eq('submission_method', 'email')
+      .maybeSingle()
+
+    if (existing) {
+      await markAsRead(token, messageId)
+      return { messageId, status: 'skipped', detail: 'duplicate' }
+    }
+
+    const bodyText  = email.body.contentType === 'html'
+      ? stripHtml(email.body.content)
+      : email.body.content
+
+    const studentId     = extractStudentId(email.subject, bodyText)
+    const researchTitle = extractResearchTitle(email.subject)
+
+    const { data: app, error: appErr } = await supabase
+      .from('applications')
+      .insert({
+        student_id:        studentId || senderEmail,
+        student_name:      senderName,
+        student_email:     senderEmail,
+        subject:           researchTitle,
+        body:              bodyText,
+        status:            'PENDING',
+        submission_method: 'email',
+        submitted_at:      email.receivedDateTime,
+      })
+      .select('id')
+      .single()
+
+    if (appErr) throw new Error(`Insert application: ${appErr.message}`)
+
+    await supabase.from('status_history').insert({
+      application_id: app.id,
+      changed_by:     null,
+      old_status:     null,
+      new_status:     'PENDING',
+      note:           'Application received via email',
+    })
+
+    if (email.hasAttachments) {
+      const attachments = await fetchAttachments(token, messageId)
+
+      for (const att of attachments) {
+        const binary      = atob(att.contentBytes)
+        const bytes       = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+        const storagePath = `${app.id}/${Date.now()}_${att.name}`
+
+        const { error: uploadErr } = await supabase.storage
+          .from('attachments')
+          .upload(storagePath, bytes, { contentType: att.contentType, upsert: false })
+
+        if (uploadErr) {
+          console.error(`Attachment upload failed (${att.name}):`, uploadErr.message)
+          continue
+        }
+
+        await supabase.from('attachments').insert({
+          application_id: app.id,
+          file_name:      att.name,
+          file_type:      att.contentType,
+          storage_url:    storagePath,
+        })
+      }
+    }
+
+    await markAsRead(token, messageId)
+    return { messageId, status: 'inserted', detail: app.id }
+
+  } catch (err) {
+    console.error(`Error processing message ${messageId}:`, err)
+    return { messageId, status: 'error', detail: (err as Error).message }
+  }
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -80,94 +257,26 @@ Deno.serve(async (req) => {
       })
     }
 
+    const token    = await getAccessToken()
+    const emails   = await fetchUnreadEmails(token)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    const mock     = pickMockEmail()
 
-    // ── MOCK DATA (replace this block with real Graph API calls) ──────────────
-    // REAL IMPLEMENTATION lives at the bottom of this file.
-    // When M365 mailbox is ready:
-    //   1. Uncomment the Graph API section below
-    //   2. Delete everything between these two comment markers
-    //   3. Replace `const emails = [mockToEmail(mock)]` with `const emails = await fetchUnreadEmails(token)`
-
-    const mockEmail = {
-      id:               `mock-${Date.now()}`,
-      studentName:      mock.studentName,
-      studentEmail:     mock.studentEmail,
-      studentId:        mock.studentId,
-      studentPhone:     mock.studentPhone,
-      subject:          mock.subject,
-      body:             mock.body,
-      hasAttachments:   mock.attachments.length > 0,
-      attachments:      mock.attachments,
-      receivedDateTime: new Date().toISOString(),
-    }
-    // ── END MOCK DATA ─────────────────────────────────────────────────────────
-
-    // Check for duplicate (same email + subject already imported)
-    const { data: existing } = await supabase
-      .from('applications')
-      .select('id')
-      .eq('student_email', mockEmail.studentEmail)
-      .eq('subject', mockEmail.subject)
-      .maybeSingle()
-
-    if (existing) {
-      return new Response(
-        JSON.stringify({ polled_at: new Date().toISOString(), total: 0, inserted: 0, skipped: 1, note: 'mock email already imported' }),
-        { headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Insert application
-    const { data: app, error: appErr } = await supabase
-      .from('applications')
-      .insert({
-        student_id:        mockEmail.studentId,
-        student_name:      mockEmail.studentName,
-        student_email:     mockEmail.studentEmail,
-        student_phone:     mockEmail.studentPhone,
-        subject:           mockEmail.subject,
-        body:              mockEmail.body,
-        status:            'PENDING',
-        submission_method: 'email',
-        submitted_at:      mockEmail.receivedDateTime,
-      })
-      .select('id')
-      .single()
-
-    if (appErr) throw new Error(`Insert application: ${appErr.message}`)
-
-    // Initial status history entry
-    await supabase.from('status_history').insert({
-      application_id: app.id,
-      changed_by:     null,
-      old_status:     null,
-      new_status:     'PENDING',
-      note:           'Application received via email (mock)',
-    })
-
-    // Insert attachment metadata (no real file upload in mock mode)
-    for (const att of mockEmail.attachments) {
-      await supabase.from('attachments').insert({
-        application_id: app.id,
-        file_name:      att.name,
-        file_type:      att.contentType,
-        storage_url:    `mock/${app.id}/${att.name}`,
-      })
+    const results = []
+    for (const email of emails) {
+      const result = await processEmail(email, token, supabase)
+      results.push(result)
     }
 
     const summary = {
-      polled_at:  new Date().toISOString(),
-      mode:       'mock',
-      total:      1,
-      inserted:   1,
-      skipped:    0,
-      errors:     0,
-      application_id: app.id,
+      polled_at: new Date().toISOString(),
+      total:     emails.length,
+      inserted:  results.filter(r => r.status === 'inserted').length,
+      skipped:   results.filter(r => r.status === 'skipped').length,
+      errors:    results.filter(r => r.status === 'error').length,
+      results,
     }
 
-    console.log('mailbox-poller (mock):', JSON.stringify(summary))
+    console.log('mailbox-poller:', JSON.stringify(summary))
 
     return new Response(JSON.stringify(summary), {
       headers: { 'Content-Type': 'application/json' },
@@ -182,68 +291,3 @@ Deno.serve(async (req) => {
     })
   }
 })
-
-
-// =============================================================================
-// REAL GRAPH API IMPLEMENTATION → see index.live.ts
-// =============================================================================
-//
-// const TENANT_ID    = Deno.env.get('AZURE_TENANT_ID')!
-// const CLIENT_ID    = Deno.env.get('AZURE_CLIENT_ID')!
-// const CLIENT_SECRET = Deno.env.get('AZURE_CLIENT_SECRET')!
-// const IRB_MAILBOX  = Deno.env.get('IRB_MAILBOX')!
-//
-// async function getAccessToken(): Promise<string> {
-//   const res = await fetch(
-//     `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,
-//     {
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-//       body: new URLSearchParams({
-//         grant_type:    'client_credentials',
-//         client_id:     CLIENT_ID,
-//         client_secret: CLIENT_SECRET,
-//         scope:         'https://graph.microsoft.com/.default',
-//       }),
-//     }
-//   )
-//   const data = await res.json()
-//   if (!data.access_token) throw new Error(`Graph auth failed: ${JSON.stringify(data)}`)
-//   return data.access_token
-// }
-//
-// async function fetchUnreadEmails(token: string) {
-//   const params = new URLSearchParams({
-//     '$filter':  'isRead eq false',
-//     '$select':  'id,subject,body,from,receivedDateTime,hasAttachments',
-//     '$top':     '20',
-//     '$orderby': 'receivedDateTime asc',
-//   })
-//   const res  = await fetch(
-//     `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/mailFolders/inbox/messages?${params}`,
-//     { headers: { Authorization: `Bearer ${token}` } }
-//   )
-//   const text = await res.text()
-//   if (!res.ok) throw new Error(`Graph messages API ${res.status}: ${text}`)
-//   return JSON.parse(text).value ?? []
-// }
-//
-// async function fetchAttachments(token: string, messageId: string) {
-//   const res  = await fetch(
-//     `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}/attachments`,
-//     { headers: { Authorization: `Bearer ${token}` } }
-//   )
-//   const data = await res.json()
-//   return (data.value ?? []).filter((a: any) => a.contentBytes)
-// }
-//
-// async function markAsRead(token: string, messageId: string) {
-//   await fetch(
-//     `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/messages/${messageId}`,
-//     {
-//       method:  'PATCH',
-//       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-//       body:    JSON.stringify({ isRead: true }),
-//     }
-//   )
-// }

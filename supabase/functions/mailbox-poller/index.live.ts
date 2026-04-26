@@ -9,20 +9,21 @@
 //
 // PREREQUISITES (Azure Portal):
 //   - App registration → API permissions → Microsoft Graph
-//   - Add: Mail.Read (Application), Mail.ReadBasic (Application)
-//   - Grant admin consent for your tenant
-//   - IRB_MAILBOX must be a work/school account on your Azure AD tenant
-//     (personal @outlook.com accounts are NOT supported by client credentials flow)
+//   - Add: Mail.Read (Delegated), offline_access (Delegated)
+//   - Supported account types: personal Microsoft accounts (or All)
+//   - No admin consent needed — just user consent via the one-time OAuth flow
 //
-// SECRETS REQUIRED (already set via `supabase secrets set`):
-//   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, IRB_MAILBOX
+// ONE-TIME SETUP to get OUTLOOK_REFRESH_TOKEN — see README or ask Claude.
+//
+// SECRETS REQUIRED (set via `supabase secrets set`):
+//   AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, OUTLOOK_REFRESH_TOKEN, IRB_MAILBOX
 //   SB_URL, SB_SERVICE_ROLE_KEY, CRON_SECRET
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const TENANT_ID            = Deno.env.get('AZURE_TENANT_ID')!
 const CLIENT_ID            = Deno.env.get('AZURE_CLIENT_ID')!
 const CLIENT_SECRET        = Deno.env.get('AZURE_CLIENT_SECRET')!
+const REFRESH_TOKEN        = Deno.env.get('OUTLOOK_REFRESH_TOKEN')!
 const IRB_MAILBOX          = Deno.env.get('IRB_MAILBOX')!
 const SUPABASE_URL         = Deno.env.get('SB_URL') ?? Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -52,35 +53,38 @@ interface GraphAttachment {
 
 async function getAccessToken(): Promise<string> {
   const res = await fetch(
-    `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,
+    'https://login.microsoftonline.com/common/oauth2/v2.0/token',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        grant_type:    'client_credentials',
+        grant_type:    'refresh_token',
         client_id:     CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        scope:         'https://graph.microsoft.com/.default',
+        refresh_token: REFRESH_TOKEN,
+        scope:         'Mail.Read offline_access',
       }),
     }
   )
   const data = await res.json()
   if (!data.access_token) {
-    throw new Error(`Graph auth failed: ${JSON.stringify(data)}`)
+    throw new Error(`Token refresh failed: ${JSON.stringify(data)}`)
   }
   return data.access_token as string
 }
 
+const IRB_SUBJECT_PREFIX = 'IRB Application'
+
 async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
+  // $search scopes to IRB submissions so random inbox mail is never processed
   const params = new URLSearchParams({
-    '$filter':  'isRead eq false',
+    '$search':  `"${IRB_SUBJECT_PREFIX}"`,
     '$select':  'id,subject,body,bodyPreview,from,receivedDateTime,hasAttachments',
     '$top':     '20',
-    '$orderby': 'receivedDateTime asc',
   })
   const res  = await fetch(
     `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/mailFolders/inbox/messages?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' } }
   )
   const text = await res.text()
   if (!res.ok) {
@@ -90,7 +94,10 @@ async function fetchUnreadEmails(token: string): Promise<GraphMessage[]> {
   if (!Array.isArray(data.value)) {
     throw new Error(`Unexpected Graph response: ${text}`)
   }
-  return data.value
+  // Secondary guard: skip anything already read or without the prefix
+  return data.value.filter((m: GraphMessage) =>
+    m.subject?.includes(IRB_SUBJECT_PREFIX)
+  )
 }
 
 async function fetchAttachments(token: string, messageId: string): Promise<GraphAttachment[]> {
@@ -132,6 +139,18 @@ function extractStudentId(subject: string, bodyText: string): string {
   return match ? match[0] : ''
 }
 
+function extractResearchTitle(subject: string): string {
+  // Strip leading student ID if present: "47822026 IRB Application: ..."
+  const withoutId = subject.replace(/^\d{6,10}\s+/, '').trim()
+  // Strip "IRB Application:" / "IRB Application —" prefix
+  const withoutPrefix = withoutId.replace(/^IRB Application[\s:—–-]+/i, '').trim()
+  return withoutPrefix || withoutId
+}
+
+function normaliseName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim()
+}
+
 // ─── Core processor ───────────────────────────────────────────────────────────
 
 async function processEmail(
@@ -143,7 +162,7 @@ async function processEmail(
 
   try {
     const senderEmail = email.from.emailAddress.address
-    const senderName  = email.from.emailAddress.name || senderEmail
+    const senderName  = normaliseName(email.from.emailAddress.name || senderEmail)
 
     const { data: existing } = await supabase
       .from('applications')
@@ -162,7 +181,8 @@ async function processEmail(
       ? stripHtml(email.body.content)
       : email.body.content
 
-    const studentId = extractStudentId(email.subject, bodyText)
+    const studentId     = extractStudentId(email.subject, bodyText)
+    const researchTitle = extractResearchTitle(email.subject)
 
     const { data: app, error: appErr } = await supabase
       .from('applications')
@@ -170,7 +190,7 @@ async function processEmail(
         student_id:        studentId || senderEmail,
         student_name:      senderName,
         student_email:     senderEmail,
-        subject:           email.subject,
+        subject:           researchTitle,
         body:              bodyText,
         status:            'PENDING',
         submission_method: 'email',
