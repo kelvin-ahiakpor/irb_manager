@@ -54,3 +54,5 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 CHALLENGES.md
+LOCAL_RESOURCES_EVIDENCE.md
+TEST_PLAN.md
