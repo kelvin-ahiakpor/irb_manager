@@ -31,6 +31,7 @@ class ApplicationDetailWidget extends StatefulWidget {
 class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
   late ApplicationDetailModel _model;
   late StreamSubscription<List<ConnectivityResult>> _connectivitySub;
+  bool _isOffline = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -41,10 +42,17 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadApplication());
 
+    Connectivity().checkConnectivity().then((results) {
+      if (mounted) {
+        safeSetState(() => _isOffline = results.every((r) => r == ConnectivityResult.none));
+      }
+    });
+
     // When the device reconnects after showing cached data, reload from
     // Supabase so the banner clears and the reviewer sees fresh data.
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       final online = results.any((r) => r != ConnectivityResult.none);
+      if (mounted) safeSetState(() => _isOffline = !online);
       if (online && _model.fromCache && mounted) {
         _model.fromCache = false;
         _loadApplication();
@@ -69,9 +77,14 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
           .select()
           .eq('application_id', id)
           .order('uploaded_at', ascending: true);
+      final attachments = List<Map<String, dynamic>>.from(attData);
+      // Persist attachment metadata so the list shows while offline.
+      // Actual PDF bytes are cached lazily — the DocumentViewer saves them to
+      // persistent storage the first time each file is opened online.
+      Hive.box('irb_cache').put('attachments_$id', jsonEncode(attachments));
       safeSetState(() {
         _model.application = appData;
-        _model.attachments = List<Map<String, dynamic>>.from(attData);
+        _model.attachments = attachments;
         _model.isLoading = false;
       });
     } catch (e) {
@@ -84,6 +97,7 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
         if (cached != null) {
           safeSetState(() {
             _model.application = cached;
+            _model.attachments = _loadAttachmentsFromCache(id);
             _model.isLoading = false;
             _model.fromCache = true;
           });
@@ -119,6 +133,27 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       return match.isEmpty ? null : match;
     } catch (_) {
       return null;
+    }
+  }
+
+  List<Map<String, dynamic>> _loadAttachmentsFromCache(String id) {
+    try {
+      final raw = Hive.box('irb_cache').get('attachments_$id') as String?;
+      if (raw == null) return [];
+      return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  int _pendingQueuedChanges(String id) {
+    try {
+      final raw =
+          Hive.box('irb_cache').get('status_update_queue') as String? ?? '[]';
+      final queue = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      return queue.where((item) => item['application_id'] == id).length;
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -765,26 +800,62 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                 left: 0,
                 right: 0,
                 bottom: 110.0,
-                child: Container(
-                  color: const Color(0xFFF59E0B),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 6.0, horizontal: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.wifi_off_rounded,
-                          size: 14, color: Colors.white),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Offline — showing cached data',
-                        style: FlutterFlowTheme.of(context).bodySmall.override(
-                              font: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                              color: Colors.white,
-                              letterSpacing: 0.0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Builder(builder: (context) {
+                      final pending = _pendingQueuedChanges(
+                          widget.applicationId ?? '');
+                      if (pending == 0) return const SizedBox.shrink();
+                      return Container(
+                        color: const Color(0xFF78350F),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 5.0, horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.schedule_rounded,
+                                size: 13, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$pending pending update${pending > 1 ? 's' : ''} queued',
+                              style: FlutterFlowTheme.of(context)
+                                  .bodySmall
+                                  .override(
+                                    font: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w600),
+                                    color: Colors.white,
+                                    letterSpacing: 0.0,
+                                  ),
                             ),
+                          ],
+                        ),
+                      );
+                    }),
+                    Container(
+                      color: const Color(0xFFF59E0B),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 6.0, horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.wifi_off_rounded,
+                              size: 14, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Offline — showing cached data',
+                            style:
+                                FlutterFlowTheme.of(context).bodySmall.override(
+                                      font: GoogleFonts.inter(
+                                          fontWeight: FontWeight.w600),
+                                      color: Colors.white,
+                                      letterSpacing: 0.0,
+                                    ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             Align(
@@ -809,6 +880,182 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                         flex: 1,
                         child: GestureDetector(
                           onTap: () async {
+                            if (_isOffline) {
+                              final proceed = await showDialog<bool>(
+                                context: context,
+                                barrierColor: Colors.black54,
+                                builder: (ctx) => Dialog(
+                                  backgroundColor: Colors.transparent,
+                                  insetPadding: const EdgeInsets.symmetric(
+                                      horizontal: 24),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: FlutterFlowTheme.of(context)
+                                          .secondaryBackground,
+                                      border: Border.all(
+                                        color:
+                                            FlutterFlowTheme.of(context).divider,
+                                        width: 3,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Container(
+                                          color: const Color(0xFFFEF3C7),
+                                          padding: const EdgeInsets.all(16),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.wifi_off_rounded,
+                                                  size: 18,
+                                                  color: Color(0xFF92400E)),
+                                              const SizedBox(width: 10),
+                                              Text(
+                                                'YOU\'RE OFFLINE',
+                                                style: FlutterFlowTheme.of(
+                                                        context)
+                                                    .titleSmall
+                                                    .override(
+                                                      font: GoogleFonts.zillaSlab(
+                                                          fontWeight:
+                                                              FontWeight.w800),
+                                                      color:
+                                                          const Color(0xFF92400E),
+                                                      letterSpacing: 0.0,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Text(
+                                            'You can still update the status. Your action will be queued and synced automatically when your connection returns.',
+                                            style: FlutterFlowTheme.of(context)
+                                                .bodyMedium
+                                                .override(
+                                                  font: GoogleFonts.inter(),
+                                                  color:
+                                                      FlutterFlowTheme.of(context)
+                                                          .primaryText,
+                                                  letterSpacing: 0.0,
+                                                  lineHeight: 1.5,
+                                                ),
+                                          ),
+                                        ),
+                                        Divider(
+                                            height: 1,
+                                            color: FlutterFlowTheme.of(context)
+                                                .divider),
+                                        IntrinsicHeight(
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Expanded(
+                                                child: GestureDetector(
+                                                  onTap: () =>
+                                                      Navigator.pop(ctx, false),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                            vertical: 14),
+                                                    decoration: BoxDecoration(
+                                                      border: Border(
+                                                        top: BorderSide(
+                                                          color: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .divider,
+                                                          width: 2,
+                                                        ),
+                                                        right: BorderSide(
+                                                          color: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .divider,
+                                                          width: 1,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        'CANCEL',
+                                                        style:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .labelMedium
+                                                                .override(
+                                                                  font: GoogleFonts
+                                                                      .inter(
+                                                                          fontWeight:
+                                                                              FontWeight.bold),
+                                                                  color: FlutterFlowTheme
+                                                                          .of(
+                                                                              context)
+                                                                      .secondaryText,
+                                                                  letterSpacing:
+                                                                      0.0,
+                                                                ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: GestureDetector(
+                                                  onTap: () =>
+                                                      Navigator.pop(ctx, true),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                            vertical: 14),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          FlutterFlowTheme.of(
+                                                                  context)
+                                                              .primary,
+                                                      border: Border(
+                                                        top: BorderSide(
+                                                          color: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .divider,
+                                                          width: 2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        'CONTINUE',
+                                                        style:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .labelMedium
+                                                                .override(
+                                                                  font: GoogleFonts
+                                                                      .inter(
+                                                                          fontWeight:
+                                                                              FontWeight.bold),
+                                                                  color: Colors
+                                                                      .white,
+                                                                  letterSpacing:
+                                                                      0.0,
+                                                                ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                              if (proceed != true) return;
+                            }
                             await context.pushNamed(
                               'UpdateStatusSheet',
                               queryParameters: {
@@ -919,14 +1166,33 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
     if (id == null) return;
 
     List<Map<String, dynamic>> history = [];
+    bool historyFromCache = false;
     try {
-      final rows = await supabase
-          .from('status_history')
-          .select('old_status, new_status, note, changed_at, reviewers(email)')
-          .eq('application_id', id)
-          .order('changed_at', ascending: false);
-      history = List<Map<String, dynamic>>.from(rows);
-    } catch (_) {}
+      // Try with the reviewer join first; fall back to plain select if the
+      // foreign-key relationship isn't exposed in the PostgREST schema cache.
+      List<Map<String, dynamic>> rows;
+      try {
+        rows = List<Map<String, dynamic>>.from(await supabase
+            .from('status_history')
+            .select('old_status, new_status, note, changed_at, reviewers(email)')
+            .eq('application_id', id)
+            .order('changed_at', ascending: false));
+      } catch (_) {
+        rows = List<Map<String, dynamic>>.from(await supabase
+            .from('status_history')
+            .select('old_status, new_status, note, changed_at')
+            .eq('application_id', id)
+            .order('changed_at', ascending: false));
+      }
+      history = rows;
+      Hive.box('irb_cache').put('history_$id', jsonEncode(history));
+    } catch (_) {
+      final raw = Hive.box('irb_cache').get('history_$id') as String?;
+      if (raw != null) {
+        history = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+        historyFromCache = true;
+      }
+    }
 
     if (!mounted) return;
 
@@ -960,11 +1226,29 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                   Icon(Icons.history_rounded,
                       color: FlutterFlowTheme.of(context).primary, size: 20),
                   const SizedBox(width: 8),
-                  Text('STATUS HISTORY',
-                      style: FlutterFlowTheme.of(context).labelLarge.override(
-                            font: GoogleFonts.inter(fontWeight: FontWeight.w800),
-                            letterSpacing: 0.0,
-                          )),
+                  Expanded(
+                    child: Text('STATUS HISTORY',
+                        style: FlutterFlowTheme.of(context).labelLarge.override(
+                              font: GoogleFonts.inter(fontWeight: FontWeight.w800),
+                              letterSpacing: 0.0,
+                            )),
+                  ),
+                  if (historyFromCache)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      color: const Color(0xFFFEF3C7),
+                      child: Text(
+                        'CACHED',
+                        style: FlutterFlowTheme.of(context).bodySmall.override(
+                              font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700),
+                              color: const Color(0xFF92400E),
+                              fontSize: 9,
+                              letterSpacing: 0.5,
+                            ),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -2,11 +2,8 @@ import '/backend/supabase.dart';
 import '/components/result_card_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'student_status_lookup_model.dart';
 export 'student_status_lookup_model.dart';
 
@@ -72,18 +69,15 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                   width: 4.0,
                 ),
               ),
-              child: Padding(
+              child: Stack(
+                children: [
+                Padding(
                 padding: EdgeInsetsDirectional.fromSTEB(16.0, 32.0, 16.0, 32.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.account_balance_rounded,
-                      color: Colors.white,
-                      size: 48.0,
-                    ),
                     Text(
                       'ASHESI IRB',
                       style:
@@ -126,9 +120,43 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                   ].divide(SizedBox(height: 8.0)),
                 ),
               ),
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: GestureDetector(
+                    onTap: () => context.pushNamed('WebSubmissionForm'),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        border: Border.all(color: Colors.white.withOpacity(0.6), width: 2),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit_rounded, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'SUBMIT APPLICATION',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Container(
-              child: Padding(
+            ),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 860.0),
+                child: Padding(
                 padding: EdgeInsets.all(24.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -250,9 +278,11 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                         ),
                                         Container(
                                           decoration: BoxDecoration(
-                                            color: Colors.transparent,
-                                            borderRadius:
-                                                BorderRadius.circular(0.0),
+                                            color: FlutterFlowTheme.of(context).secondaryBackground,
+                                            border: Border.all(
+                                              color: FlutterFlowTheme.of(context).divider,
+                                              width: 2.0,
+                                            ),
                                           ),
                                           child: Container(
                                             child: Padding(
@@ -314,8 +344,36 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                             .select()
                                             .eq('student_id', query)
                                             .order('submitted_at', ascending: false);
+                                        final results = List<Map<String, dynamic>>.from(data);
+
+                                        // Batch-fetch the most recent reviewer note
+                                        // per application so the student can see
+                                        // any feedback left on their submission.
+                                        final Map<String, String?> notes = {};
+                                        if (results.isNotEmpty) {
+                                          final ids = results
+                                              .map((r) => r['id']?.toString())
+                                              .whereType<String>()
+                                              .toList();
+                                          try {
+                                            final histRows = await supabase
+                                                .from('status_history')
+                                                .select('application_id, note')
+                                                .filter('application_id', 'in', '(${ids.join(',')})')
+                                                .not('note', 'is', null)
+                                                .order('changed_at', ascending: false);
+                                            for (final row in histRows) {
+                                              final id = row['application_id'] as String?;
+                                              if (id != null && !notes.containsKey(id)) {
+                                                notes[id] = row['note'] as String?;
+                                              }
+                                            }
+                                          } catch (_) {}
+                                        }
+
                                         safeSetState(() {
-                                          _model.results = List<Map<String, dynamic>>.from(data);
+                                          _model.results = results;
+                                          _model.notes = notes;
                                           _model.hasSearched = true;
                                           _model.isSearching = false;
                                         });
@@ -402,20 +460,23 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                           style: FlutterFlowTheme.of(context).bodyMedium,
                         ),
                       ),
-                    ..._model.results.asMap().entries.map((e) {
-                      final app = e.value;
+                    ..._model.results.map((app) {
+                      final appId = app['id']?.toString() ?? '';
                       final status = (app['status'] as String?) ?? 'PENDING';
-                      return Padding(
-                        padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 8.0),
-                        child: ResultCardWidget(
-                          name: (app['student_name'] as String?) ?? '',
-                          id: double.tryParse((app['student_id'] as String?) ?? '') ?? 0.0,
-                          status_bg: status == 'APPROVED' ? 'success' : status == 'REJECTED' ? 'error' : 'accent',
-                          status: status.replaceAll('_', ' '),
-                          title: (app['subject'] as String?) ?? '',
-                          has_notes: false,
-                          notes: '',
-                        ),
+                      final note = _model.notes[appId];
+                      final statusBg = status == 'APPROVED'
+                          ? 'success'
+                          : status == 'REJECTED'
+                              ? 'error'
+                              : 'accent';
+                      return ResultCardWidget(
+                        name: (app['student_name'] as String?) ?? '',
+                        id: (app['student_id'] as String?) ?? '',
+                        status_bg: statusBg,
+                        status: status,
+                        title: (app['subject'] as String?) ?? '',
+                        has_notes: note != null && note.isNotEmpty,
+                        notes: note,
                       );
                     }).toList(),
                     Container(
@@ -436,7 +497,7 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                           children: [
                             Icon(
                               Icons.info_rounded,
-                              color: FlutterFlowTheme.of(context).primaryText,
+                              color: const Color(0xFF4A4A4A),
                               size: 24.0,
                             ),
                             Expanded(
@@ -448,51 +509,21 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                                 children: [
                                   Text(
                                     'Need Help?',
-                                    style: FlutterFlowTheme.of(context)
-                                        .labelLarge
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight: FontWeight.bold,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          fontSize: 14.0,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.bold,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelLarge
-                                                  .fontStyle,
-                                          lineHeight: 1.3,
-                                        ),
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1A1A1A),
+                                      fontSize: 14.0,
+                                      height: 1.3,
+                                    ),
                                   ),
                                   Text(
                                     'If you cannot find your application or have questions, please contact the IRB coordinator at irb@ashesi.edu.gh',
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodySmall
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight: FontWeight.normal,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodySmall
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .secondaryText,
-                                          fontSize: 12.0,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.normal,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodySmall
-                                                  .fontStyle,
-                                          lineHeight: 1.4,
-                                        ),
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.normal,
+                                      color: const Color(0xFF4A4A4A),
+                                      fontSize: 12.0,
+                                      height: 1.4,
+                                    ),
                                   ),
                                 ].divide(SizedBox(height: 4.0)),
                               ),
@@ -501,22 +532,9 @@ class _StudentStatusLookupWidgetState extends State<StudentStatusLookupWidget> {
                         ),
                       ),
                     ),
-                    wrapWithModel(
-                      model: _model.resultCardModel2,
-                      updateCallback: () => safeSetState(() {}),
-                      child: ResultCardWidget(
-                        name: 'Aba Williams',
-                        id: 11022025.0,
-                        status_bg: 'success',
-                        status: 'COND. APPROVED',
-                        title: 'Mental Health Awareness in Secondary Schools',
-                        has_notes: true,
-                        notes:
-                            'Please clarify the participant compensation section in Appendix B.',
-                      ),
-                    ),
                   ].divide(SizedBox(height: 24.0)),
                 ),
+              ),
               ),
             ),
             Container(

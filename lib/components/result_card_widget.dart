@@ -21,7 +21,7 @@ class ResultCardWidget extends StatefulWidget {
   });
 
   final String? name;
-  final double? id;
+  final String? id;
   final String? status_bg;
   final String? status;
   final String? title;
@@ -125,7 +125,7 @@ class _ResultCardWidgetState extends State<ResultCardWidget> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'ID: ${widget!.id?.toString()}',
+                          'ID: ${widget!.id ?? '—'}',
                           style: FlutterFlowTheme.of(context)
                               .bodySmall
                               .override(
@@ -149,43 +149,32 @@ class _ResultCardWidgetState extends State<ResultCardWidget> {
                       ].divide(SizedBox(height: 4.0)),
                     ),
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: FlutterFlowTheme.of(context).accent1,
-                      border: Border.all(
-                        color: FlutterFlowTheme.of(context).divider,
-                        width: 2.0,
+                  Builder(builder: (context) {
+                    final bg = widget.status_bg ?? 'accent';
+                    final chipColor = bg == 'success'
+                        ? const Color(0xFF10B981)
+                        : bg == 'error'
+                            ? FlutterFlowTheme.of(context).error
+                            : FlutterFlowTheme.of(context).primary;
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: chipColor.withOpacity(0.12),
+                        border: Border.all(color: chipColor.withOpacity(0.5), width: 2.0),
                       ),
-                    ),
-                    child: Padding(
-                      padding:
-                          EdgeInsetsDirectional.fromSTEB(12.0, 6.0, 12.0, 6.0),
-                      child: Text(
-                        valueOrDefault<String>(
-                          widget!.status,
-                          'UNDER REVIEW',
-                        ),
-                        style: FlutterFlowTheme.of(context)
-                            .labelMedium
-                            .override(
-                              font: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                fontStyle: FlutterFlowTheme.of(context)
-                                    .labelMedium
-                                    .fontStyle,
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(12.0, 6.0, 12.0, 6.0),
+                        child: Text(
+                          valueOrDefault<String>(widget.status, 'UNDER REVIEW'),
+                          style: FlutterFlowTheme.of(context).labelMedium.override(
+                                font: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                                color: chipColor,
+                                fontSize: 12.0,
+                                letterSpacing: 0.0,
                               ),
-                              color: FlutterFlowTheme.of(context).primaryText,
-                              fontSize: 12.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.bold,
-                              fontStyle: FlutterFlowTheme.of(context)
-                                  .labelMedium
-                                  .fontStyle,
-                              lineHeight: 1.3,
-                            ),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ],
               ),
               Divider(
@@ -545,60 +534,40 @@ class _ResultCardWidgetState extends State<ResultCardWidget> {
                   ),
                 ),
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Color(0xFFFFF4E5),
-                  borderRadius: BorderRadius.circular(0.0),
-                  border: Border.all(
-                    color: Color(0xFFFFE0B2),
-                    width: 1.0,
+              if (widget.has_notes == true && (widget.notes?.isNotEmpty ?? false))
+                Container(
+                  decoration: BoxDecoration(
+                    color: Color(0xFFFFF4E5),
+                    border: Border.all(color: Color(0xFFFFE0B2), width: 1.0),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'REVIEWER NOTE',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF7C5000),
+                            fontSize: 10.0,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          widget.notes!,
+                          style: GoogleFonts.inter(
+                            fontStyle: FontStyle.italic,
+                            color: const Color(0xFF2D1A00),
+                            fontSize: 12.0,
+                            height: 1.5,
+                          ),
+                        ),
+                      ].divide(SizedBox(height: 4.0)),
+                    ),
                   ),
                 ),
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'REVIEWER NOTES',
-                        style: FlutterFlowTheme.of(context).labelSmall.override(
-                              font: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                fontStyle: FlutterFlowTheme.of(context)
-                                    .labelSmall
-                                    .fontStyle,
-                              ),
-                              color: FlutterFlowTheme.of(context).error,
-                              fontSize: 10.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.bold,
-                              fontStyle: FlutterFlowTheme.of(context)
-                                  .labelSmall
-                                  .fontStyle,
-                              lineHeight: 1.2,
-                            ),
-                      ),
-                      Text(
-                        widget!.notes!,
-                        style: FlutterFlowTheme.of(context).bodySmall.override(
-                              font: GoogleFonts.inter(
-                                fontWeight: FontWeight.normal,
-                                fontStyle: FontStyle.italic,
-                              ),
-                              color: FlutterFlowTheme.of(context).primaryText,
-                              fontSize: 12.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.normal,
-                              fontStyle: FontStyle.italic,
-                              lineHeight: 1.4,
-                            ),
-                      ),
-                    ].divide(SizedBox(height: 4.0)),
-                  ),
-                ),
-              ),
             ].divide(SizedBox(height: 16.0)),
           ),
         ),

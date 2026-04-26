@@ -58,18 +58,31 @@ class _DocumentViewerWidgetState extends State<DocumentViewerWidget> {
       });
       return;
     }
+
+    // Check the persistent cache first — the detail screen pre-downloads PDFs
+    // when online so they're available here without a network request.
+    final safeName =
+        _safeFileName(widget.fileName ?? path.split('/').last);
+    final docDir = await getApplicationDocumentsDirectory();
+    final persistentFile = File('${docDir.path}/irb_att_$safeName');
+    if (await persistentFile.exists()) {
+      safeSetState(() {
+        _localPdfPath = persistentFile.path;
+        _loadingDocument = false;
+      });
+      return;
+    }
+
+    // Not in persistent cache — try downloading now.
     try {
       final url = await supabase.storage
           .from('attachments')
           .createSignedUrl(path, 3600);
       final bytes = await supabase.storage.from('attachments').download(path);
-      final cacheDir = await getTemporaryDirectory();
-      final fileName = _safeFileName(widget.fileName ?? path.split('/').last);
-      final file = File('${cacheDir.path}/irb_attachment_$fileName');
-      await file.writeAsBytes(bytes, flush: true);
+      await persistentFile.writeAsBytes(bytes, flush: true);
       safeSetState(() {
         _signedUrl = url;
-        _localPdfPath = file.path;
+        _localPdfPath = persistentFile.path;
         _loadingDocument = false;
       });
     } catch (e) {

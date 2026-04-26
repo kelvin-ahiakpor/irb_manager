@@ -4,9 +4,11 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'reviewer_dashboard_model.dart';
 export 'reviewer_dashboard_model.dart';
 
@@ -99,6 +101,10 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
     _applicationsStream = supabase
         .from('applications')
         .stream(primaryKey: ['id']).order('submitted_at', ascending: false);
+    // On first stream emission, bulk-cache detail data for recent submissions.
+    _applicationsStream.first.then((data) {
+      if (data.isNotEmpty) _cacheRecentApplicationDetails(data);
+    });
     // Check initial connectivity//
     // LOCAL RESOURCE: connectivity_plus — snapshot the current network state
     // so the UI knows whether to show the offline banner on first render.
@@ -122,8 +128,12 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
       // Each item is a status update that was saved locally while the device
       // had no network. We write them to Supabase now and then wipe the queue.
       if (!offline) {
+        // Drain the queue atomically: clear first so a second connectivity
+        // event firing before we finish (common on Android — WiFi + cellular
+        // events arrive back-to-back) cannot pick up the same items again.
         final queue = _model.loadQueue();
         if (queue.isNotEmpty) {
+          _model.clearQueue();
           String? reviewerId;
           final email = supabase.auth.currentUser?.email;
           if (email != null) {
@@ -136,17 +146,33 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
           }
           for (final item in queue) {
             try {
-              await supabase.from('applications').update(
-                  {'status': item['status']}).eq('id', item['application_id']);
+              final appId = item['application_id'] as String;
+              final newStatus = item['status'] as String;
+              final note = item['note'] as String?;
+              final notify = item['notify'] as bool? ?? true;
+
+              await supabase
+                  .from('applications')
+                  .update({'status': newStatus}).eq('id', appId);
               await supabase.from('status_history').insert({
-                'application_id': item['application_id'],
+                'application_id': appId,
                 'changed_by': reviewerId,
                 'old_status': null,
-                'new_status': item['status'],
+                'new_status': newStatus,
+                if (note != null && note.isNotEmpty) 'note': note,
               });
+              if (notify) {
+                try {
+                  await supabase.functions.invoke('send-notification', body: {
+                    'application_id': appId,
+                    'channels': ['email', 'sms'],
+                    'status': newStatus,
+                    if (note != null && note.isNotEmpty) 'reviewer_note': note,
+                  });
+                } catch (_) {}
+              }
             } catch (_) {}
           }
-          _model.clearQueue();
         }
       }
     });
@@ -174,6 +200,7 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
       if (mounted) {
         safeSetState(() => _latestApplications = merged);
       }
+      _cacheRecentApplicationDetails(merged);
     } catch (_) {
       // Keep the current stream/cache data if the manual refresh fails.
     }
@@ -214,6 +241,65 @@ class _ReviewerDashboardWidgetState extends State<ReviewerDashboardWidget> {
   DateTime _parseDate(Object? value) {
     return DateTime.tryParse(value?.toString() ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  // Proactively caches attachment metadata and status history for the 30 most
+  // recent submissions within the last 30 days. Two batch queries cover all
+  // apps at once instead of one query per application. PDF bytes are NOT
+  // pre-downloaded here — they're cached lazily when the reviewer opens a PDF.
+  Future<void> _cacheRecentApplicationDetails(
+      List<Map<String, dynamic>> apps) async {
+    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final recent = apps.where((a) {
+      final ts = DateTime.tryParse(a['submitted_at']?.toString() ?? '');
+      return ts != null && ts.isAfter(cutoff);
+    }).take(30).toList();
+    if (recent.isEmpty) return;
+
+    final ids = recent
+        .map((a) => a['id']?.toString())
+        .whereType<String>()
+        .toList();
+    if (ids.isEmpty) return;
+
+    final box = Hive.box('irb_cache');
+    final inClause = '(${ids.join(',')})';
+
+    // Batch-fetch attachments for all recent apps in one request.
+    try {
+      final rows = List<Map<String, dynamic>>.from(await supabase
+          .from('attachments')
+          .select()
+          .filter('application_id', 'in', inClause)
+          .order('uploaded_at', ascending: true));
+      final grouped = <String, List<Map<String, dynamic>>>{};
+      for (final row in rows) {
+        final appId = row['application_id']?.toString();
+        if (appId == null) continue;
+        grouped.putIfAbsent(appId, () => []).add(row);
+      }
+      for (final id in ids) {
+        box.put('attachments_$id', jsonEncode(grouped[id] ?? []));
+      }
+    } catch (_) {}
+
+    // Batch-fetch status history for all recent apps in one request.
+    try {
+      final rows = List<Map<String, dynamic>>.from(await supabase
+          .from('status_history')
+          .select('application_id, old_status, new_status, note, changed_at')
+          .filter('application_id', 'in', inClause)
+          .order('changed_at', ascending: false));
+      final grouped = <String, List<Map<String, dynamic>>>{};
+      for (final row in rows) {
+        final appId = row['application_id']?.toString();
+        if (appId == null) continue;
+        grouped.putIfAbsent(appId, () => []).add(row);
+      }
+      for (final id in ids) {
+        box.put('history_$id', jsonEncode(grouped[id] ?? []));
+      }
+    } catch (_) {}
   }
 
   @override

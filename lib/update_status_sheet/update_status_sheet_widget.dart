@@ -1012,37 +1012,6 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          if (_isOffline)
-                                            Container(
-                                              width: double.infinity,
-                                              padding: const EdgeInsets.symmetric(
-                                                  vertical: 8.0, horizontal: 12.0),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFEF3C7),
-                                                border: Border.all(
-                                                    color: const Color(0xFFF59E0B),
-                                                    width: 1.5),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  const Icon(Icons.wifi_off_rounded,
-                                                      size: 14,
-                                                      color: Color(0xFF92400E)),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      'You\'re offline. This update will be queued and applied automatically when your connection returns.',
-                                                      style: FlutterFlowTheme.of(context).bodySmall.override(
-                                                            font: GoogleFonts.inter(),
-                                                            color: const Color(0xFF92400E),
-                                                            letterSpacing: 0.0,
-                                                            lineHeight: 1.4,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
                                           GestureDetector(
                                             onTap: _model.isSubmitting ||
                                                     _model.selectedStatus ==
@@ -1060,6 +1029,7 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                     if (newStatus == null) {
                                                       return;
                                                     }
+
                                                     safeSetState(() => _model
                                                         .isSubmitting = true);
                                                     try {
@@ -1141,17 +1111,11 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
                                                           msg.contains('ClientException') ||
                                                           msg.contains('Network is unreachable');
                                                       if (isOffline && newStatus != null) {
-                                                        // Queue the update locally — the dashboard
-                                                        // will flush it to Supabase on reconnect.
-                                                        final box = Hive.box('irb_cache');
-                                                        final raw = box.get('status_update_queue') as String? ?? '[]';
-                                                        final queue = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-                                                        queue.add({
-                                                          'application_id': id,
-                                                          'status': newStatus,
-                                                          'queued_at': DateTime.now().toIso8601String(),
-                                                        });
-                                                        box.put('status_update_queue', jsonEncode(queue));
+                                                        _enqueueOfflineUpdate(
+                                                          id, newStatus,
+                                                          note: _model.reviewerNoteController.text.trim(),
+                                                          notify: _model.stdSwitchModel.switchValue ?? true,
+                                                        );
                                                         if (context.mounted) {
                                                           ScaffoldMessenger.of(context).showSnackBar(
                                                             const SnackBar(
@@ -1367,5 +1331,20 @@ class _UpdateStatusSheetWidgetState extends State<UpdateStatusSheetWidget> {
         ),
       ),
     );
+  }
+
+  void _enqueueOfflineUpdate(String id, String newStatus,
+      {String? note, bool notify = true}) {
+    final box = Hive.box('irb_cache');
+    final raw = box.get('status_update_queue') as String? ?? '[]';
+    final queue = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    queue.add({
+      'application_id': id,
+      'status': newStatus,
+      if (note != null && note.isNotEmpty) 'note': note,
+      'notify': notify,
+      'queued_at': DateTime.now().toIso8601String(),
+    });
+    box.put('status_update_queue', jsonEncode(queue));
   }
 }

@@ -154,63 +154,95 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                 child: Padding(
                   padding:
                       EdgeInsetsDirectional.fromSTEB(16.0, 24.0, 16.0, 24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        'ASHESI UNIVERSITY',
-                        style: FlutterFlowTheme.of(context).labelLarge.override(
-                              font: GoogleFonts.inter(
-                                fontWeight: FontWeight.w800,
-                                fontStyle: FlutterFlowTheme.of(context)
-                                    .labelLarge
-                                    .fontStyle,
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ASHESI UNIVERSITY',
+                            style: FlutterFlowTheme.of(context).labelLarge.override(
+                                  font: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w800,
+                                    fontStyle: FlutterFlowTheme.of(context)
+                                        .labelLarge
+                                        .fontStyle,
+                                  ),
+                                  color: Colors.white,
+                                  fontSize: 14.0,
+                                  letterSpacing: 0.0,
+                                  fontWeight: FontWeight.w800,
+                                  fontStyle: FlutterFlowTheme.of(context)
+                                      .labelLarge
+                                      .fontStyle,
+                                  lineHeight: 1.3,
+                                ),
+                          ),
+                          Text(
+                            'IRB SUBMISSION',
+                            style: FlutterFlowTheme.of(context)
+                                .headlineMedium
+                                .override(
+                                  font: GoogleFonts.zillaSlab(
+                                    fontWeight: FontWeight.w900,
+                                    fontStyle: FlutterFlowTheme.of(context)
+                                        .headlineMedium
+                                        .fontStyle,
+                                  ),
+                                  color: Colors.white,
+                                  fontSize: 26.0,
+                                  letterSpacing: 0.0,
+                                  fontWeight: FontWeight.w900,
+                                  fontStyle: FlutterFlowTheme.of(context)
+                                      .headlineMedium
+                                      .fontStyle,
+                                  lineHeight: 1.2,
+                                ),
+                          ),
+                          Padding(
+                            padding:
+                                EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 0.0),
+                            child: Container(
+                              width: 60.0,
+                              height: 6.0,
+                              decoration: BoxDecoration(
+                                color: FlutterFlowTheme.of(context).accent1,
                               ),
-                              color: Colors.white,
-                              fontSize: 14.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.w800,
-                              fontStyle: FlutterFlowTheme.of(context)
-                                  .labelLarge
-                                  .fontStyle,
-                              lineHeight: 1.3,
                             ),
+                          ),
+                        ].divide(SizedBox(height: 4.0)),
                       ),
-                      Text(
-                        'IRB SUBMISSION',
-                        style: FlutterFlowTheme.of(context)
-                            .headlineMedium
-                            .override(
-                              font: GoogleFonts.zillaSlab(
-                                fontWeight: FontWeight.w900,
-                                fontStyle: FlutterFlowTheme.of(context)
-                                    .headlineMedium
-                                    .fontStyle,
-                              ),
-                              color: Colors.white,
-                              fontSize: 26.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.w900,
-                              fontStyle: FlutterFlowTheme.of(context)
-                                  .headlineMedium
-                                  .fontStyle,
-                              lineHeight: 1.2,
-                            ),
-                      ),
-                      Padding(
-                        padding:
-                            EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 0.0),
+                      GestureDetector(
+                        onTap: () => context.pushNamed('StudentStatusLookup'),
                         child: Container(
-                          width: 60.0,
-                          height: 6.0,
                           decoration: BoxDecoration(
-                            color: FlutterFlowTheme.of(context).accent1,
+                            color: Colors.white.withOpacity(0.15),
+                            border: Border.all(color: Colors.white.withOpacity(0.6), width: 2),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.search_rounded, color: Colors.white, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                'CHECK STATUS',
+                                style: GoogleFonts.inter(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ].divide(SizedBox(height: 4.0)),
+                    ],
                   ),
                 ),
               ),
@@ -1630,6 +1662,36 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                       ),
                   borderRadius: BorderRadius.circular(8.0),
                   elevation: 0,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => context.pushNamed('StudentStatusLookup'),
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: FlutterFlowTheme.of(context).primary,
+                      width: 2,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_rounded,
+                          color: FlutterFlowTheme.of(context).primary, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'CHECK APPLICATION STATUS',
+                        style: GoogleFonts.inter(
+                          color: FlutterFlowTheme.of(context).primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
