@@ -1,0 +1,229 @@
+Activity 3: Implementation
+
+Ashesi IRB Application Manager
+Kelvin K. Ahiakpor
+CS443: Mobile App Development
+Dr. David Sampah
+April 2026
+
+1. Introduction
+
+This section explains how the Ashesi IRB Application Manager was implemented from end to end. The goal of the build was practical: make IRB review work faster for committee members, while giving students a simple way to submit applications and check status. The final solution includes a mobile reviewer app, a web submission/status portal, a Supabase backend, and notification pipelines for email, SMS, and push.
+
+Live demo:
+https://youtu.be/RJ1JXf3P6So
+
+Source code:
+https://github.com/kelvin-ahiakpor/cultivate
+
+[image here]
+Figure 1: Activity 3 implementation overview
+
+2. Implementation stack
+
+2.1 Programming languages
+- Dart (Flutter application logic and UI)
+- TypeScript (Supabase Edge Functions)
+- SQL (Supabase schema, migrations, and policies)
+
+2.2 Frameworks and platforms
+- Flutter (cross-platform UI for Android, iOS, and Web)
+- Supabase (Backend-as-a-Service)
+- Vercel (deployment target for Flutter web build)
+- Firebase Cloud Messaging (push delivery)
+
+2.3 Database and backend services
+- Supabase PostgreSQL database
+- Supabase Auth (reviewer authentication support)
+- Supabase Storage (private attachment bucket)
+- Supabase Edge Functions (mail polling + notification workflows)
+
+2.4 Core libraries and packages used
+- supabase_flutter: client SDK for DB, auth, storage, functions
+- go_router: route management and navigation
+- hive_flutter: local cache and offline queue
+- connectivity_plus: online/offline detection and sync triggers
+- firebase_messaging + firebase_core: push token registration and permissions
+- flutter_pdfview: in-app PDF rendering
+- path_provider + dart:io: local persistent file caching
+- file_picker (native) and dart:html input path (web): document upload
+- url_launcher: open signed links in browser when needed
+
+2.5 External APIs and integrations
+- Microsoft Graph API (IRB mailbox polling and email parsing)
+- Twilio API (SMS notifications)
+- Resend API (email notifications)
+- Firebase Cloud Messaging API (push notifications to reviewers)
+
+[image here]
+Figure 2: Tools, frameworks, and service integrations
+
+3. High-level system implementation
+
+The implementation follows a three-layer pattern:
+
+- Presentation layer: Flutter screens for reviewer and student workflows
+- Application layer: business logic for filtering, status updates, offline fallback, and synchronization
+- Data and integration layer: Supabase database/storage plus Edge Functions for ingestion and notifications
+
+On the reviewer side, committee members sign in, view incoming applications, open submitted files, update statuses, and write notes. On the student side, users can submit via web form and look up application progress by student ID.
+
+When a submission enters the system, either from the web form or from the mailbox poller, it is written to the applications table, related attachment rows are saved, status history starts at PENDING, and notifications are triggered through configured channels.
+
+[image here]
+Figure 3: End-to-end request and data flow
+
+4. Major implementation components
+
+4.1 Reviewer mobile application (Flutter)
+
+Main implemented screens/components:
+- Splash screen with startup routing logic
+- Microsoft login screen for reviewer authentication
+- Reviewer dashboard with status filters (ALL, PENDING, IN REVIEW, CONDITIONALLY APPROVED, APPROVED, REJECTED)
+- Application detail view with metadata, notes, and attachment list
+- Document viewer for in-app PDF reading
+- Update status sheet for decision actions and notes
+- Status history timeline
+- Settings screen
+
+What was implemented:
+- Real-time application list stream from Supabase
+- Status filtering and quick reviewer workflow
+- Notification trigger after status change
+- Offline banners and fallback behaviors
+
+[image here]
+Figure 4: Reviewer dashboard implementation screenshot
+
+4.2 Student web workflow (Flutter web)
+
+Main implemented screens/components:
+- Web submission form
+- Student status lookup page
+
+What was implemented:
+- Form validation for required fields
+- Multi-file attachment upload pipeline to Supabase Storage
+- Insert of application and attachment metadata into database
+- Fire-and-forget notification call after successful submission
+- Public status lookup by student ID without account login
+
+[image here]
+Figure 5: Student web implementation screenshot
+
+4.3 Backend and database implementation (Supabase)
+
+Core tables implemented:
+- reviewers
+- applications
+- attachments
+- status_history
+- notifications
+
+Core backend logic implemented:
+- Row-level access control policies for reviewer-safe operations
+- Edge Function for mailbox polling and email ingestion
+- Edge Function for email/SMS/push delivery
+- Storage organization for per-application attachment paths
+
+Database design decisions:
+- Application records keep core student/research metadata
+- Attachment metadata is decoupled from blob file storage
+- Status changes are audit-trailed in status_history
+- Notification events are logged for traceability
+
+[image here]
+Figure 6: Database tables and relations used in implementation
+
+5. Offline and local resource implementation
+
+A core part of this implementation was handling weak or unavailable connectivity for reviewers.
+
+Implemented offline capabilities:
+- Local cache of applications in Hive (key: applications)
+- Local cache of reviewer identity for offline login bypass
+- Offline queue for status updates (key: status_update_queue)
+- Reconnect listener to flush queued updates to Supabase
+- Attachment metadata caching for detail view
+- Persistent local PDF file cache in application documents directory
+
+Why this matters:
+Reviewers can still open recently synced records, continue reading documents, and queue status decisions while offline. When the device reconnects, the app syncs queued updates automatically.
+
+[image here]
+Figure 7: Offline queue and synchronization flow
+
+6. Notification pipeline implementation
+
+The project supports three channels:
+- Email via Resend
+- SMS via Twilio
+- Push via Firebase Cloud Messaging
+
+Implementation behavior:
+- New applications can trigger reviewer push notifications
+- Status changes can trigger student email and SMS
+- Notification attempts are recorded in notifications table
+- Safe mock mode behavior exists when secrets are not configured
+
+This setup made it possible to test notification behavior in development while still keeping production-ready paths for deployment.
+
+[image here]
+Figure 8: Multi-channel notification pipeline
+
+7. Security and access implementation
+
+Security controls implemented:
+- Environment-based secret management for API credentials
+- Supabase key separation (anon key for client, service role key for backend functions)
+- Private attachment storage with signed URL access
+- Reviewer authorization checks in app/backend flow
+- Controlled function invocation using secret headers where required
+
+Data handling approach:
+- Sensitive operations are kept in backend functions
+- Client app performs only scoped reads/writes allowed by policy
+- Attachment access is time-bound when delivered through signed links
+
+8. Deployment implementation
+
+Deployment setup completed:
+- Flutter mobile builds for Android and iOS targets
+- Flutter web build deployed through Vercel
+- Supabase Edge Functions deployed with no-verify-jwt where internal auth headers are used
+- Supabase secrets managed through CLI for integration credentials
+
+Operational notes:
+- Mailbox poller runs on a recurring interval and ingests unread IRB emails
+- Web routing rewrite is configured for GoRouter compatibility on Vercel
+
+9. Testing and validation summary
+
+Implementation was validated through practical workflow testing across core paths:
+- Reviewer sign-in and dashboard load
+- Student web submission with attachments
+- Status update and notification trigger
+- Student status lookup
+- Offline reviewer behavior and reconnect synchronization
+- Document opening in-app and via browser fallback
+
+The linked demo video presents these flows:
+https://youtu.be/RJ1JXf3P6So
+
+10. Components delivered for Activity 3
+
+Delivered implementation artifacts:
+- Functional Flutter application (mobile + web)
+- Supabase schema, storage, and serverless functions
+- Notification integrations (email, SMS, push)
+- Offline caching and synchronization logic
+- Source repository and runnable project setup
+- APK (submitted alongside this report, as required)
+
+Repository reference:
+https://github.com/kelvin-ahiakpor/cultivate
+
+11. Conclusion
+
+Activity 3 moved the project from design to a working, testable product. The implementation now supports the real IRB flow: intake, review, decision, and notification. It also handles practical constraints like unstable internet and reviewer mobility. The result is a system that is usable in day-to-day committee work, not just a prototype.
