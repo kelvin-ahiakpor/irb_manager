@@ -3,6 +3,7 @@ import '/components/info_tile_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -59,9 +60,12 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
         _model.isLoading = false;
       });
     } catch (e) {
+      final msg = e.toString();
       safeSetState(() {
         _model.isLoading = false;
-        _model.errorMessage = e.toString();
+        _model.errorMessage = msg.contains('PGRST116') || msg.contains('0 rows')
+            ? 'not_found'
+            : msg;
       });
     }
   }
@@ -87,12 +91,57 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
       );
     }
     if (_model.errorMessage != null || _model.application == null) {
+      final isNotFound = _model.errorMessage == 'not_found' || _model.application == null;
       return Scaffold(
         backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
         body: Center(
-          child: Text(
-            _model.errorMessage ?? 'Application not found.',
-            style: FlutterFlowTheme.of(context).bodyMedium,
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isNotFound ? Icons.search_off_rounded : Icons.error_outline_rounded,
+                  size: 56,
+                  color: FlutterFlowTheme.of(context).secondaryText,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isNotFound ? 'Application Not Found' : 'Something went wrong',
+                  style: FlutterFlowTheme.of(context).titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isNotFound
+                      ? 'This application may have been deleted or is no longer available.'
+                      : (_model.errorMessage ?? ''),
+                  style: FlutterFlowTheme.of(context).bodySmall.override(
+                        font: GoogleFonts.inter(),
+                        color: FlutterFlowTheme.of(context).secondaryText,
+                        letterSpacing: 0.0,
+                        lineHeight: 1.5,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FFButtonWidget(
+                  onPressed: () => context.pop(),
+                  text: 'Go Back',
+                  options: FFButtonOptions(
+                    height: 44.0,
+                    color: FlutterFlowTheme.of(context).primary,
+                    textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                          font: GoogleFonts.inter(),
+                          color: Colors.white,
+                          letterSpacing: 0.0,
+                        ),
+                    borderRadius: BorderRadius.circular(8.0),
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -291,18 +340,10 @@ class _ApplicationDetailWidgetState extends State<ApplicationDetailWidget> {
                                 children: [
                                   Expanded(
                                     flex: 1,
-                                    child: wrapWithModel(
-                                      model: _model.infoTileModel1,
-                                      updateCallback: () => safeSetState(() {}),
-                                      child: InfoTileWidget(
-                                        label: 'STUDENT ID',
-                                        value: double.tryParse(
-                                                (app['student_id']
-                                                        as String?) ??
-                                                    '') ??
-                                            0.0,
-                                      ),
-                                    ),
+                                    child: _infoText(
+                                        context,
+                                        'STUDENT ID',
+                                        (app['student_id'] as String?) ?? '—'),
                                   ),
                                   Expanded(
                                     flex: 1,

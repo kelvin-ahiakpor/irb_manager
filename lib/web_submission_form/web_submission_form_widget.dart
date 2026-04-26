@@ -4,6 +4,7 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -41,6 +42,18 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
     super.dispose();
   }
 
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'docx'],
+    );
+    if (result == null) return;
+    safeSetState(() {
+      _model.selectedFiles.addAll(result.files);
+    });
+  }
+
   Future<void> _submitForm() async {
     final studentId = _model.studentIdController.text.trim();
     final email     = _model.emailController.text.trim();
@@ -60,41 +73,47 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
     try {
       final result = await supabase.from('applications').insert({
         'student_id':        studentId,
-        'student_name':      studentId, // name not collected separately — use ID as fallback
+        'student_name':      _model.studentNameController.text.trim(),
         'student_email':     email,
         'student_phone':     phone.isEmpty ? null : phone,
         'subject':           title,
-        'body':              '',
+        'body':              _model.researchDescController.text.trim(),
         'status':            'PENDING',
-        'submission_method': 'form',
+        'submission_method': 'web_form',
         'submitted_at':      DateTime.now().toIso8601String(),
       }).select('id').single();
 
-      // Trigger push notifications to reviewers
-      await supabase.functions.invoke('send-notification', body: {
-        'application_id': result['id'],
-        'channels':       ['push'],
+      // Upload attachments to Supabase storage and record them
+      final applicationId = result['id'] as String;
+      for (final file in _model.selectedFiles) {
+        final bytes = file.bytes;
+        if (bytes == null) continue;
+        final storagePath = '$applicationId/${file.name}';
+        await supabase.storage
+            .from('attachments')
+            .uploadBinary(storagePath, bytes);
+        await supabase.from('attachments').insert({
+          'application_id': applicationId,
+          'file_name':      file.name,
+          'file_type':      file.extension ?? 'pdf',
+          'storage_url':    storagePath,
+          'uploaded_at':    DateTime.now().toIso8601String(),
+        });
+      }
+
+      // Notify reviewers (push) + student (email + sms) — fire and forget
+      supabase.functions.invoke('send-notification', body: {
+        'application_id': applicationId,
+        'channels':       ['push', 'email', 'sms'],
         'status':         'PENDING',
-        'reviewer_note':  'New application submitted via form.',
-      });
+        'reviewer_note':  'New application submitted via web form.',
+      }).catchError((_) {});
 
       if (!mounted) return;
       safeSetState(() {
         _model.isSubmitting = false;
         _model.submitted    = true;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Application submitted successfully!'),
-        backgroundColor: const Color(0xFF27AE60),
-        duration: const Duration(seconds: 4),
-      ));
-
-      // Clear fields
-      _model.studentIdController.clear();
-      _model.emailController.clear();
-      _model.phoneController.clear();
-      _model.researchTitleController.clear();
 
     } catch (e) {
       if (!mounted) return;
@@ -113,7 +132,7 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
       backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
       body: SafeArea(
         top: true,
-        child: SingleChildScrollView(
+        child: _model.submitted ? _buildSuccessScreen(context) : SingleChildScrollView(
           primary: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -191,8 +210,10 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                   ),
                 ),
               ),
-              Container(
-                child: Padding(
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 860.0),
+                  child: Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -341,44 +362,23 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                 borderRadius:
                                                     BorderRadius.circular(0.0),
                                               ),
-                                              child: Container(
-                                                child: Padding(
-                                                  padding: EdgeInsetsDirectional
-                                                      .fromSTEB(
-                                                          8.0, 8.0, 8.0, 8.0),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.max,
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.start,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Container(
-                                                        width: 0.0,
-                                                        height: 0.0,
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Container(
-                                                          width: 0.0,
-                                                          height: 0.0,
-                                                        ),
-                                                      ),
-                                                      Container(
-                                                        width: 0.0,
-                                                        height: 0.0,
-                                                      ),
-                                                    ].divide(
-                                                        SizedBox(width: 8.0)),
+                                              child: Padding(
+                                                padding: EdgeInsetsDirectional
+                                                    .fromSTEB(
+                                                        8.0, 8.0, 8.0, 8.0),
+                                                child: TextField(
+                                                  controller: _model.studentNameController,
+                                                  keyboardType: TextInputType.name,
+                                                  style: const TextStyle(fontSize: 13.0),
+                                                  decoration: InputDecoration(
+                                                    hintText: 'Your full name',
+                                                    hintStyle: const TextStyle(fontSize: 13.0, color: Colors.grey),
+                                                    isDense: true,
+                                                    contentPadding: EdgeInsets.zero,
+                                                    border: InputBorder.none,
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                            Container(
-                                              width: 0.0,
-                                              height: 0.0,
                                             ),
                                           ].divide(SizedBox(height: 6.0)),
                                         ),
@@ -937,72 +937,36 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                 ),
                                           ),
                                           Container(
-                                            width: MediaQuery.sizeOf(context)
-                                                    .width *
-                                                1.0,
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.start,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                Container(
-                                                  width: 0.0,
-                                                  height: 0.0,
+                                            decoration: BoxDecoration(
+                                              color: Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(0.0),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  EdgeInsetsDirectional.fromSTEB(
+                                                      8.0, 8.0, 8.0, 8.0),
+                                              child: TextField(
+                                                controller:
+                                                    _model.researchDescController,
+                                                keyboardType:
+                                                    TextInputType.multiline,
+                                                maxLines: 5,
+                                                minLines: 3,
+                                                style: const TextStyle(
+                                                    fontSize: 13.0),
+                                                decoration: InputDecoration(
+                                                  hintText:
+                                                      'Describe your study objectives, methodology, and participant involvement...',
+                                                  hintStyle: const TextStyle(
+                                                      fontSize: 13.0,
+                                                      color: Colors.grey),
+                                                  isDense: true,
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                  border: InputBorder.none,
                                                 ),
-                                                Container(
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.transparent,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            0.0),
-                                                  ),
-                                                  child: Container(
-                                                    child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  8.0,
-                                                                  8.0,
-                                                                  8.0,
-                                                                  8.0),
-                                                      child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.max,
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .start,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          Container(
-                                                            width: 0.0,
-                                                            height: 0.0,
-                                                          ),
-                                                          Expanded(
-                                                            flex: 1,
-                                                            child: Container(
-                                                              width: 0.0,
-                                                              height: 0.0,
-                                                            ),
-                                                          ),
-                                                          Container(
-                                                            width: 0.0,
-                                                            height: 0.0,
-                                                          ),
-                                                        ].divide(SizedBox(
-                                                            width: 8.0)),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                Container(
-                                                  width: 0.0,
-                                                  height: 0.0,
-                                                ),
-                                              ].divide(SizedBox(height: 6.0)),
+                                              ),
                                             ),
                                           ),
                                         ].divide(SizedBox(height: 4.0)),
@@ -1042,72 +1006,36 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                 ),
                                           ),
                                           Container(
-                                            width: MediaQuery.sizeOf(context)
-                                                    .width *
-                                                1.0,
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.start,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                Container(
-                                                  width: 0.0,
-                                                  height: 0.0,
+                                            decoration: BoxDecoration(
+                                              color: Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(0.0),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  EdgeInsetsDirectional.fromSTEB(
+                                                      8.0, 8.0, 8.0, 8.0),
+                                              child: TextField(
+                                                controller: _model
+                                                    .recruitmentPlanController,
+                                                keyboardType:
+                                                    TextInputType.multiline,
+                                                maxLines: 5,
+                                                minLines: 3,
+                                                style: const TextStyle(
+                                                    fontSize: 13.0),
+                                                decoration: InputDecoration(
+                                                  hintText:
+                                                      'Describe how you plan to recruit participants, inclusion/exclusion criteria...',
+                                                  hintStyle: const TextStyle(
+                                                      fontSize: 13.0,
+                                                      color: Colors.grey),
+                                                  isDense: true,
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                  border: InputBorder.none,
                                                 ),
-                                                Container(
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.transparent,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            0.0),
-                                                  ),
-                                                  child: Container(
-                                                    child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  8.0,
-                                                                  8.0,
-                                                                  8.0,
-                                                                  8.0),
-                                                      child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.max,
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .start,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          Container(
-                                                            width: 0.0,
-                                                            height: 0.0,
-                                                          ),
-                                                          Expanded(
-                                                            flex: 1,
-                                                            child: Container(
-                                                              width: 0.0,
-                                                              height: 0.0,
-                                                            ),
-                                                          ),
-                                                          Container(
-                                                            width: 0.0,
-                                                            height: 0.0,
-                                                          ),
-                                                        ].divide(SizedBox(
-                                                            width: 8.0)),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                Container(
-                                                  width: 0.0,
-                                                  height: 0.0,
-                                                ),
-                                              ].divide(SizedBox(height: 6.0)),
+                                              ),
                                             ),
                                           ),
                                         ].divide(SizedBox(height: 4.0)),
@@ -1216,42 +1144,58 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.center,
                                     children: [
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: Color(0xFFFDFCF8),
-                                          borderRadius:
-                                              BorderRadius.circular(0.0),
-                                          border: Border.all(
-                                            color: FlutterFlowTheme.of(context)
-                                                .divider,
-                                            width: 2.0,
+                                      GestureDetector(
+                                        onTap: _pickFiles,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFFFDFCF8),
+                                            borderRadius:
+                                                BorderRadius.circular(0.0),
+                                            border: Border.all(
+                                              color: FlutterFlowTheme.of(context)
+                                                  .divider,
+                                              width: 2.0,
+                                            ),
                                           ),
-                                        ),
-                                        alignment:
-                                            AlignmentDirectional(0.0, 0.0),
-                                        child: Padding(
-                                          padding: EdgeInsets.all(32.0),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.start,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                Icons.cloud_upload_rounded,
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondary,
-                                                size: 40.0,
-                                              ),
-                                              Text(
-                                                'Tap to upload IRB forms',
-                                                style: FlutterFlowTheme.of(
-                                                        context)
-                                                    .bodyMedium
-                                                    .override(
-                                                      font: GoogleFonts.inter(
+                                          alignment:
+                                              AlignmentDirectional(0.0, 0.0),
+                                          child: Padding(
+                                            padding: EdgeInsets.all(32.0),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.cloud_upload_rounded,
+                                                  color:
+                                                      FlutterFlowTheme.of(context)
+                                                          .secondary,
+                                                  size: 40.0,
+                                                ),
+                                                Text(
+                                                  'Tap to upload IRB forms',
+                                                  style: FlutterFlowTheme.of(
+                                                          context)
+                                                      .bodyMedium
+                                                      .override(
+                                                        font: GoogleFonts.inter(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontStyle:
+                                                              FlutterFlowTheme.of(
+                                                                      context)
+                                                                  .bodyMedium
+                                                                  .fontStyle,
+                                                        ),
+                                                        color:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .secondary,
+                                                        fontSize: 14.0,
+                                                        letterSpacing: 0.0,
                                                         fontWeight:
                                                             FontWeight.bold,
                                                         fontStyle:
@@ -1259,30 +1203,30 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                                     context)
                                                                 .bodyMedium
                                                                 .fontStyle,
+                                                        lineHeight: 1.4,
                                                       ),
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .secondary,
-                                                      fontSize: 14.0,
-                                                      letterSpacing: 0.0,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .bodyMedium
-                                                              .fontStyle,
-                                                      lineHeight: 1.4,
-                                                    ),
-                                              ),
-                                              Text(
-                                                'PDF or DOCX (Max 10MB)',
-                                                style: FlutterFlowTheme.of(
-                                                        context)
-                                                    .labelSmall
-                                                    .override(
-                                                      font: GoogleFonts.inter(
+                                                ),
+                                                Text(
+                                                  'PDF or DOCX (Max 10MB)',
+                                                  style: FlutterFlowTheme.of(
+                                                          context)
+                                                      .labelSmall
+                                                      .override(
+                                                        font: GoogleFonts.inter(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontStyle:
+                                                              FlutterFlowTheme.of(
+                                                                      context)
+                                                                  .labelSmall
+                                                                  .fontStyle,
+                                                        ),
+                                                        color:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .primaryText,
+                                                        fontSize: 10.0,
+                                                        letterSpacing: 0.0,
                                                         fontWeight:
                                                             FontWeight.bold,
                                                         fontStyle:
@@ -1290,54 +1234,74 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                                     context)
                                                                 .labelSmall
                                                                 .fontStyle,
+                                                        lineHeight: 1.2,
                                                       ),
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .primaryText,
-                                                      fontSize: 10.0,
-                                                      letterSpacing: 0.0,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .labelSmall
-                                                              .fontStyle,
-                                                      lineHeight: 1.2,
-                                                    ),
-                                              ),
-                                            ].divide(SizedBox(height: 8.0)),
+                                                ),
+                                              ].divide(SizedBox(height: 8.0)),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.start,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          wrapWithModel(
-                                            model: _model.fileItemModel1,
-                                            updateCallback: () =>
-                                                safeSetState(() {}),
-                                            child: FileItemWidget(
-                                              filename:
-                                                  'IRB_Form_Initial_v1.pdf',
-                                            ),
-                                          ),
-                                          wrapWithModel(
-                                            model: _model.fileItemModel2,
-                                            updateCallback: () =>
-                                                safeSetState(() {}),
-                                            child: FileItemWidget(
-                                              filename:
-                                                  'Consent_Letter_Template.docx',
-                                            ),
-                                          ),
-                                        ].divide(SizedBox(height: 0.0)),
-                                      ),
+                                      // Dynamic list of selected files
+                                      if (_model.selectedFiles.isNotEmpty)
+                                        Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: _model.selectedFiles
+                                              .asMap()
+                                              .entries
+                                              .map((entry) {
+                                            final index = entry.key;
+                                            final file = entry.value;
+                                            return Padding(
+                                              padding: EdgeInsetsDirectional
+                                                  .fromSTEB(0.0, 4.0, 0.0, 0.0),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.max,
+                                                children: [
+                                                  Icon(
+                                                    Icons.insert_drive_file_rounded,
+                                                    size: 18.0,
+                                                    color: FlutterFlowTheme.of(
+                                                            context)
+                                                        .secondary,
+                                                  ),
+                                                  SizedBox(width: 8.0),
+                                                  Expanded(
+                                                    child: Text(
+                                                      file.name,
+                                                      style: FlutterFlowTheme.of(
+                                                              context)
+                                                          .bodySmall
+                                                          .override(
+                                                            font: GoogleFonts
+                                                                .inter(),
+                                                            fontSize: 12.0,
+                                                            letterSpacing: 0.0,
+                                                          ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  GestureDetector(
+                                                    onTap: () {
+                                                      safeSetState(() {
+                                                        _model.selectedFiles
+                                                            .removeAt(index);
+                                                      });
+                                                    },
+                                                    child: Icon(
+                                                      Icons.close_rounded,
+                                                      size: 18.0,
+                                                      color: Colors.red,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
                                     ].divide(SizedBox(height: 16.0)),
                                   ),
                                 ),
@@ -1367,7 +1331,7 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                 Row(
                                   mainAxisSize: MainAxisSize.max,
                                   mainAxisAlignment: MainAxisAlignment.start,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Theme(
                                       data: ThemeData(
@@ -1418,9 +1382,7 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                                                         .bodySmall
                                                         .fontStyle,
                                               ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryText,
+                                              color: Colors.black87,
                                               fontSize: 12.0,
                                               letterSpacing: 0.0,
                                               fontWeight: FontWeight.normal,
@@ -1518,6 +1480,7 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                     ].divide(SizedBox(height: 24.0)),
                   ),
                 ),
+                ),
               ),
               Container(
                 decoration: BoxDecoration(
@@ -1581,6 +1544,87 @@ class _WebSubmissionFormWidgetState extends State<WebSubmissionFormWidget> {
                       ),
                     ].divide(SizedBox(height: 4.0)),
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuccessScreen(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 80),
+              Icon(Icons.check_circle_outline_rounded,
+                  size: 80,
+                  color: FlutterFlowTheme.of(context).primary),
+              const SizedBox(height: 24),
+              Text(
+                'Application Submitted!',
+                style: FlutterFlowTheme.of(context).headlineMedium.override(
+                      font: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                      color: FlutterFlowTheme.of(context).primaryText,
+                      letterSpacing: 0.0,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your IRB application has been received and is under review. '
+                'A confirmation has been sent to your email and phone number.',
+                style: FlutterFlowTheme.of(context).bodyMedium.override(
+                      font: GoogleFonts.inter(),
+                      color: FlutterFlowTheme.of(context).secondaryText,
+                      letterSpacing: 0.0,
+                      lineHeight: 1.6,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You will be notified when the status of your application changes.',
+                style: FlutterFlowTheme.of(context).bodySmall.override(
+                      font: GoogleFonts.inter(),
+                      color: FlutterFlowTheme.of(context).secondaryText,
+                      letterSpacing: 0.0,
+                      lineHeight: 1.5,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
+              FFButtonWidget(
+                onPressed: () {
+                  _model.studentIdController.clear();
+                  _model.studentNameController.clear();
+                  _model.emailController.clear();
+                  _model.phoneController.clear();
+                  _model.researchTitleController.clear();
+                  _model.researchDescController.clear();
+                  _model.recruitmentPlanController.clear();
+                  _model.selectedFiles.clear();
+                  _model.checkboxValue = false;
+                  safeSetState(() => _model.submitted = false);
+                },
+                text: 'Submit Another Application',
+                options: FFButtonOptions(
+                  width: double.infinity,
+                  height: 48.0,
+                  color: FlutterFlowTheme.of(context).primary,
+                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                        font: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                        color: Colors.white,
+                        letterSpacing: 0.0,
+                      ),
+                  borderRadius: BorderRadius.circular(8.0),
+                  elevation: 0,
                 ),
               ),
             ],

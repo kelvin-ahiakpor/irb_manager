@@ -78,6 +78,7 @@ dependencies:
   hive_flutter: ^1.1.0
   supabase_flutter: ^2.8.4
   flutter_pdfview: ^1.4.4
+  file_picker: ^8.1.2
 
 dependency_overrides:
   http: 1.4.0

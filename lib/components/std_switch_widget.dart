@@ -38,7 +38,7 @@ class _StdSwitchWidgetState extends State<StdSwitchWidget> {
     super.initState();
     _model = createModel(context, () => StdSwitchModel());
 
-    _model.switchValue = false;
+    _model.switchValue = widget.active ?? false;
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
   }
 

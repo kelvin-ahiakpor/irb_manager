@@ -19,10 +19,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // ─── Env ─────────────────────────────────────────────────────────────────────
 
-const TENANT_ID     = Deno.env.get('AZURE_TENANT_ID')   ?? ''
-const CLIENT_ID     = Deno.env.get('AZURE_CLIENT_ID')   ?? ''
-const CLIENT_SECRET = Deno.env.get('AZURE_CLIENT_SECRET') ?? ''
-const IRB_MAILBOX   = Deno.env.get('IRB_MAILBOX')        ?? ''
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 
 const TWILIO_SID    = Deno.env.get('TWILIO_ACCOUNT_SID')   ?? ''
 const TWILIO_TOKEN  = Deno.env.get('TWILIO_AUTH_TOKEN')     ?? ''
@@ -33,72 +30,47 @@ const SUPABASE_KEY  = Deno.env.get('SB_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPAB
 
 const FCM_SA_B64    = Deno.env.get('FCM_SERVICE_ACCOUNT_B64') ?? ''
 
-const MOCK_EMAIL    = !TENANT_ID || !CLIENT_ID || !CLIENT_SECRET || !IRB_MAILBOX
+const MOCK_EMAIL    = !RESEND_API_KEY
 const MOCK_SMS      = !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM
 const MOCK_PUSH     = !FCM_SA_B64
 
-// ─── Graph API helpers ────────────────────────────────────────────────────────
-
-async function getAccessToken(): Promise<string> {
-  const res = await fetch(
-    `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type:    'client_credentials',
-        client_id:     CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        scope:         'https://graph.microsoft.com/.default',
-      }),
-    }
-  )
-  const data = await res.json()
-  if (!data.access_token) throw new Error(`Graph auth failed: ${JSON.stringify(data)}`)
-  return data.access_token as string
-}
+// ─── Resend helper ────────────────────────────────────────────────────────────
 
 async function sendEmail(
-  token: string,
   toEmail: string,
   toName: string,
   subject: string,
   status: string,
   note: string
 ): Promise<void> {
-  const body = [
+  const text = [
     `Dear ${toName},`,
     '',
     `Your IRB application "${subject}" has been updated to: ${status}.`,
-    note ? `\nReviewer note: ${note}` : '',
+    note ? `Reviewer note: ${note}` : '',
     '',
     'Please contact the IRB office if you have any questions.',
     '',
     'Ashesi University IRB Committee',
-  ].join('\n')
+  ].filter(line => line !== undefined).join('\n')
 
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${IRB_MAILBOX}/sendMail`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: {
-          subject: `IRB Application Update: ${status}`,
-          body: { contentType: 'Text', content: body },
-          toRecipients: [{ emailAddress: { address: toEmail, name: toName } }],
-        },
-        saveToSentItems: false,
-      }),
-    }
-  )
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Ashesi IRB <onboarding@resend.dev>',
+      to:   [toEmail],
+      subject: `IRB Application Update: ${status}`,
+      text,
+    }),
+  })
 
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Graph sendMail ${res.status}: ${text}`)
+    const err = await res.text()
+    throw new Error(`Resend ${res.status}: ${err}`)
   }
 }
 
@@ -209,11 +181,20 @@ async function sendPushToTokens(
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders })
+  }
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     })
   }
 
@@ -268,8 +249,7 @@ Deno.serve(async (req) => {
       results.email = 'mocked'
     } else {
       try {
-        const token = await getAccessToken()
-        await sendEmail(token, app.student_email, app.student_name, app.subject, status, reviewer_note)
+        await sendEmail(app.student_email, app.student_name, app.subject, status, reviewer_note)
         results.email = 'sent'
       } catch (err) {
         console.error('Email failed:', (err as Error).message)
@@ -357,6 +337,6 @@ Deno.serve(async (req) => {
   console.log(`send-notification [${application_id}]:`, JSON.stringify(results))
 
   return new Response(JSON.stringify({ ok: true, results }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
   })
 })

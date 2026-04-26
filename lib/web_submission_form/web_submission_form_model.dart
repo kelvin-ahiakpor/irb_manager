@@ -4,6 +4,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
 import 'web_submission_form_widget.dart' show WebSubmissionFormWidget;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -25,9 +26,13 @@ class WebSubmissionFormModel extends FlutterFlowModel<WebSubmissionFormWidget> {
   late TextEditingController phoneController;
   late TextEditingController researchTitleController;
   late TextEditingController researchDescController;
+  late TextEditingController recruitmentPlanController;
 
   bool isSubmitting = false;
   bool submitted = false;
+
+  // Selected files for upload
+  List<PlatformFile> selectedFiles = [];
 
   @override
   void initState(BuildContext context) {
@@ -39,6 +44,7 @@ class WebSubmissionFormModel extends FlutterFlowModel<WebSubmissionFormWidget> {
     phoneController        = TextEditingController();
     researchTitleController = TextEditingController();
     researchDescController  = TextEditingController();
+    recruitmentPlanController = TextEditingController();
   }
 
   @override
@@ -51,5 +57,6 @@ class WebSubmissionFormModel extends FlutterFlowModel<WebSubmissionFormWidget> {
     phoneController.dispose();
     researchTitleController.dispose();
     researchDescController.dispose();
+    recruitmentPlanController.dispose();
   }
 }
